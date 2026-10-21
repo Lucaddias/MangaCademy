@@ -94,7 +94,7 @@ flowchart LR
 ```bash
 git clone https://github.com/Lucaddias/MangaCademy.git
 cd MangaCademy
-open MihonReader.xcodeproj
+open MangaCademy.xcodeproj
 ```
 
 No Xcode, escolha seu time em **Signing & Capabilities**, selecione o dispositivo e pressione <kbd>⌘</kbd> + <kbd>R</kbd>.
