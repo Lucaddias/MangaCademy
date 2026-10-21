@@ -31,17 +31,17 @@ Como as extensões originais são APKs Android, o app reimplementa em Swift os t
 
 ## Recursos
 
-- 📚 **Catálogo infinito** — consulta todas as fontes em rodízio e continua carregando até a última página da última fonte.
-- 🔗 **Unificação inteligente de obras** — a mesma obra em fontes e idiomas diferentes vira um único card, reconhecida por:
+- **Catálogo infinito** — consulta todas as fontes em rodízio e continua carregando até a última página da última fonte.
+- **Unificação inteligente de obras** — a mesma obra em fontes e idiomas diferentes vira um único card, reconhecida por:
   - títulos e títulos alternativos idênticos;
   - títulos traduzidos com o mesmo significado (_“Ilusão de Amor: Superstar”_ = _“Love is an Illusion! - Superstar”_ = _“El amor es una ilusión Superstar”_);
   - impressão digital da capa (dHash), que reconhece a mesma arte mesmo redimensionada.
-- 🌎 **Filtro rápido de idioma** — Português, Inglês ou Todos. Cada obra mostra apenas os capítulos disponíveis no idioma escolhido.
-- 🧩 **Capítulos sem repetição** — capítulos de várias scans são mesclados e deduplicados por número.
-- 🔞 **Bloqueio de conteúdo adulto** — esconde obras com as tags _Adult_, _Adulto_ ou _+18_ (ligado por padrão, ajustável em Ajustes). Tags como _Vida Adulta_ não são afetadas.
-- 📖 **Leitor Webtoon e paginado**, com progresso, histórico e biblioteca salvos localmente.
-- ⚡ **Cache em disco** de capas e metadados, para abrir o catálogo de novo sem refazer o trabalho.
-- 🩺 **Fontes resilientes** — sites fora do ar ou atrás de proteção anti-bot são consultados por último e não travam o restante.
+- **Filtro rápido de idioma** — Português, Inglês ou Todos. Cada obra mostra apenas os capítulos disponíveis no idioma escolhido.
+- **Capítulos sem repetição** — capítulos de várias scans são mesclados e deduplicados por número.
+- **Bloqueio de conteúdo adulto** — esconde obras com as tags _Adult_, _Adulto_ ou _+18_ (ligado por padrão, ajustável em Ajustes). Tags como _Vida Adulta_ não são afetadas.
+- **Leitor Webtoon e paginado**, com progresso, histórico e biblioteca salvos localmente.
+- **Cache em disco** de capas e metadados, para abrir o catálogo de novo sem refazer o trabalho.
+- **Fontes resilientes** — sites fora do ar ou atrás de proteção anti-bot são consultados por último e não travam o restante.
 
 ## Fontes
 
