@@ -1,0 +1,352 @@
+import Foundation
+
+/// Uma ocorrência da obra em uma fonte específica.
+public struct WorkSourceRef: Codable, Hashable, Identifiable {
+    public var id: String { "\(sourceId):\(remoteUrl)" }
+    public let sourceId: String
+    public let sourceName: String
+    public let remoteUrl: String
+    public let title: String
+    public let coverUrl: String?
+    public let languages: [String]
+
+    public init(sourceId: String, sourceName: String, remoteUrl: String, title: String, coverUrl: String?, languages: [String]) {
+        self.sourceId = sourceId
+        self.sourceName = sourceName
+        self.remoteUrl = remoteUrl
+        self.title = title
+        self.coverUrl = coverUrl
+        self.languages = languages
+    }
+}
+
+/// Obra unificada: o mesmo título vindo de várias fontes e idiomas aparece uma única vez.
+public struct UnifiedWork: Identifiable, Hashable {
+    public let id: String
+    public var title: String
+    public var coverUrl: String?
+    public var coverSourceId: String?
+    public var refs: [WorkSourceRef]
+    public var languages: [String]
+    public var titleKeys: Set<String>
+    /// Tags de todas as fontes (sem repetição).
+    public private(set) var genres: [String] = []
+    /// Alguma fonte marcou a obra como conteúdo adulto ("Adult", "Adulto", "+18"...).
+    public private(set) var isAdult = false
+
+    public init(ref: WorkSourceRef, altTitles: [String] = [], genres: [String] = []) {
+        self.id = ref.id
+        self.title = ref.title
+        self.coverUrl = ref.coverUrl
+        self.coverSourceId = ref.coverUrl == nil ? nil : ref.sourceId
+        self.refs = [ref]
+        self.languages = ref.languages
+        self.titleKeys = TitleKey.keys(for: [ref.title] + altTitles)
+        addGenres(genres)
+    }
+
+    /// Reconstrói a obra a partir das referências salvas (biblioteca).
+    public init?(id: String, title: String, coverUrl: String?, refs: [WorkSourceRef]) {
+        guard let first = refs.first else { return nil }
+        self.id = id
+        self.title = title
+        self.coverUrl = coverUrl ?? first.coverUrl
+        self.coverSourceId = first.sourceId
+        self.refs = refs
+        self.languages = []
+        self.titleKeys = []
+        for ref in refs {
+            addLanguages(ref.languages)
+            titleKeys.formUnion(TitleKey.keys(for: [ref.title]))
+        }
+        titleKeys.formUnion(TitleKey.keys(for: [title]))
+    }
+
+    public func matches(_ filter: LanguageFilter) -> Bool {
+        filter == .all || languages.contains(where: filter.matches)
+    }
+
+    /// Capas das outras fontes, para quando a principal não carregar.
+    public var fallbackCovers: [WorkSourceRef] {
+        refs.filter { $0.coverUrl != nil && $0.coverUrl != coverUrl }
+    }
+
+    public mutating func merge(ref: WorkSourceRef, altTitles: [String], genres: [String] = []) {
+        guard !refs.contains(where: { $0.id == ref.id }) else { return }
+        refs.append(ref)
+        addLanguages(ref.languages)
+        addGenres(genres)
+        titleKeys.formUnion(TitleKey.keys(for: [ref.title] + altTitles))
+        if coverUrl == nil, let cover = ref.coverUrl {
+            coverUrl = cover
+            coverSourceId = ref.sourceId
+        }
+    }
+
+    public mutating func addLanguages(_ langs: [String]) {
+        for lang in langs where !languages.contains(lang) {
+            languages.append(lang)
+        }
+    }
+
+    public mutating func addGenres(_ tags: [String]) {
+        for tag in tags {
+            let name = tag.trimmed
+            guard !name.isEmpty else { continue }
+            let key = ContentFilter.normalizeTag(name)
+            if !genres.contains(where: { ContentFilter.normalizeTag($0) == key }) {
+                genres.append(name)
+                if ContentFilter.isAdultTag(name) { isAdult = true }
+            }
+        }
+    }
+
+    /// Badges compactos de idioma priorizando o filtro ativo.
+    public func languageBadges(preferred filter: LanguageFilter, limit: Int = 2) -> String? {
+        let known = languages.filter { $0 != "all" }
+        guard !known.isEmpty else { return nil }
+        let order = filter.preferredLanguages
+        let sorted = known.sorted { a, b in
+            let ia = order.firstIndex(of: a) ?? Int.max
+            let ib = order.firstIndex(of: b) ?? Int.max
+            return ia == ib ? a < b : ia < ib
+        }
+        var text = sorted.prefix(limit).map(LanguageCode.shortLabel).joined(separator: " · ")
+        if sorted.count > limit { text += " +\(sorted.count - limit)" }
+        return text
+    }
+
+    public var refsJSON: String? {
+        guard let data = try? JSONEncoder().encode(refs) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    public static func refs(fromJSON json: String?) -> [WorkSourceRef] {
+        guard let json, let data = json.data(using: .utf8) else { return [] }
+        return (try? JSONDecoder().decode([WorkSourceRef].self, from: data)) ?? []
+    }
+}
+
+/// Chave normalizada de título para detectar a mesma obra em fontes diferentes.
+public enum TitleKey {
+    public static func normalize(_ title: String) -> String {
+        var s = title.folding(options: [.diacriticInsensitive, .caseInsensitive, .widthInsensitive], locale: nil)
+        s = s.replacingOccurrences(of: "&", with: " and ")
+        s = s.replacingOccurrences(of: "’", with: "")
+        s = s.replacingOccurrences(of: "'", with: "")
+        var out = String.UnicodeScalarView()
+        for scalar in s.unicodeScalars {
+            out.append(CharacterSet.alphanumerics.contains(scalar) ? scalar : " ")
+        }
+        var words = String(out).split(separator: " ").map(String.init)
+        if words.first == "the" && words.count > 1 { words.removeFirst() }
+        return words.joined(separator: " ")
+    }
+
+    public static func keys(for titles: [String]) -> Set<String> {
+        var result = Set<String>()
+        for title in titles {
+            let key = normalize(title)
+            // Evita fundir obras por títulos genéricos demais (curtos ou só números)
+            guard !key.isEmpty, !key.allSatisfy({ $0.isNumber || $0 == " " }) else { continue }
+            if key.count >= 3 || key.unicodeScalars.contains(where: { $0.value > 0x2E80 }) {
+                result.insert(key)
+            }
+        }
+        return result
+    }
+}
+
+/// Índice incremental usado pelo catálogo para unificar resultados à medida que chegam.
+///
+/// Uma obra nova é fundida a uma existente quando:
+/// 1. algum título (principal ou alternativo) normalizado é igual;
+/// 2. os títulos têm o mesmo significado em idiomas diferentes ("Ilusão de Amor: Superstar" =
+///    "Love is an Illusion! - Superstar"), com confirmação pela capa quando só há palavras comuns;
+/// 3. as capas são praticamente a mesma imagem e os títulos compartilham uma palavra distintiva.
+/// Duas entradas diferentes da mesma fonte nunca são fundidas pelos critérios 2 e 3.
+public struct WorkMerger {
+    public private(set) var works: [UnifiedWork] = []
+    /// Quantas obras têm tag adulta (para o catálogo saber quantas ficarão visíveis).
+    public private(set) var adultCount = 0
+    private var indexByKey: [String: Int] = [:]
+    private var indexByRef: [String: Int] = [:]
+    /// Paralelos a `works`: conceitos de cada título e fontes presentes.
+    private var conceptSets: [[Set<String>]] = []
+    private var sourceIds: [Set<String>] = []
+    private var indexByConcept: [String: [Int]] = [:]
+    private var covers: [(hash: UInt64, work: Int, sourceId: String)] = []
+    private var genericCovers: [UInt64] = []
+    /// Por que cada entrada foi fundida sem título idêntico (diagnóstico).
+    public private(set) var fuzzyReasons: [String: String] = [:]
+
+    public init() {}
+
+    public func contains(refId: String) -> Bool {
+        indexByRef[refId] != nil
+    }
+
+    /// Obra já existente com algum título idêntico (não precisa de dados extras para fundir).
+    public func exactMatch(for item: SourceMangaItem) -> Int? {
+        let mainKeys = TitleKey.keys(for: [item.title])
+        let keys = mainKeys.union(TitleKey.keys(for: item.altTitles))
+        for existing in Set(keys.compactMap({ indexByKey[$0] })).sorted() {
+            // Dentro da mesma fonte só funde duplicatas com o mesmo título principal;
+            // assim um título alternativo genérico não arrasta obras diferentes do mesmo site.
+            let sameSource = works[existing].refs.filter { $0.sourceId == item.sourceId }
+            if !sameSource.isEmpty && mainKeys.isDisjoint(with: TitleKey.keys(for: sameSource.map(\.title))) {
+                continue
+            }
+            return existing
+        }
+        return nil
+    }
+
+    /// Insere ou funde um item. Retorna true se criou uma obra nova.
+    @discardableResult
+    public mutating func add(_ item: SourceMangaItem, sourceName: String, coverHash: UInt64? = nil) -> Bool {
+        if indexByRef[item.id] != nil { return false }
+        let ref = WorkSourceRef(
+            sourceId: item.sourceId,
+            sourceName: sourceName,
+            remoteUrl: item.remoteUrl,
+            title: item.title,
+            coverUrl: item.coverUrl,
+            languages: item.languages
+        )
+        let sets = Self.concepts(for: item)
+        var hash = coverHash
+        if let coverHash, isGeneric(coverHash, sourceId: item.sourceId) { hash = nil }
+
+        var target = exactMatch(for: item)
+        if target == nil, let match = conceptMatch(sets, sourceId: item.sourceId, coverHash: hash) {
+            target = match.index
+            fuzzyReasons[item.id] = match.reason
+        }
+        if target == nil, let hash, let match = coverMatch(hash, tokens: Set(sets.joined()), sourceId: item.sourceId) {
+            target = match.index
+            fuzzyReasons[item.id] = match.reason
+        }
+        if let target {
+            let wasAdult = works[target].isAdult
+            works[target].merge(ref: ref, altTitles: item.altTitles, genres: item.genres)
+            if !wasAdult && works[target].isAdult { adultCount += 1 }
+            register(item, sets: sets, coverHash: hash, at: target)
+            return false
+        }
+
+        let work = UnifiedWork(ref: ref, altTitles: item.altTitles, genres: item.genres)
+        if work.isAdult { adultCount += 1 }
+        works.append(work)
+        conceptSets.append([])
+        sourceIds.append([])
+        register(item, sets: sets, coverHash: hash, at: works.count - 1)
+        return true
+    }
+
+    // MARK: - Índices
+
+    private static func concepts(for item: SourceMangaItem) -> [Set<String>] {
+        var result: [Set<String>] = []
+        for title in [item.title] + item.altTitles.prefix(40) {
+            let set = TitleConcepts.tokens(title)
+            if !set.isEmpty && !result.contains(set) { result.append(set) }
+        }
+        return result
+    }
+
+    private mutating func register(_ item: SourceMangaItem, sets: [Set<String>], coverHash: UInt64?, at index: Int) {
+        indexByRef[item.id] = index
+        for key in works[index].titleKeys where indexByKey[key] == nil {
+            indexByKey[key] = index
+        }
+        sourceIds[index].insert(item.sourceId)
+        for set in sets where !conceptSets[index].contains(set) {
+            conceptSets[index].append(set)
+        }
+        for token in Set(sets.joined()) where indexByConcept[token]?.last != index {
+            indexByConcept[token, default: []].append(index)
+        }
+        if let coverHash {
+            covers.append((coverHash, index, item.sourceId))
+        }
+    }
+
+    // MARK: - Títulos traduzidos
+
+    private func conceptMatch(_ sets: [Set<String>], sourceId: String, coverHash: UInt64?) -> (index: Int, reason: String)? {
+        let candidates = sets.filter { $0.count >= 2 }
+        guard !candidates.isEmpty else { return nil }
+        var hits: [Int: Int] = [:]
+        for token in Set(candidates.joined()) {
+            for index in indexByConcept[token] ?? [] { hits[index, default: 0] += 1 }
+        }
+        var best: (index: Int, score: Double, reason: String)?
+        for (index, count) in hits where count >= 2 && !sourceIds[index].contains(sourceId) {
+            for a in candidates {
+                for b in conceptSets[index] {
+                    let shared = a.intersection(b)
+                    guard shared.count >= 2 else { continue }
+                    let score = Double(shared.count) / Double(a.count + b.count - shared.count)
+                    guard score > (best?.score ?? 0) else { continue }
+                    var reason: String?
+                    if score >= 0.75 {
+                        // Um nome próprio/termo raro em comum ("solo leveling"), ou o título inteiro
+                        // equivalente com 3+ conceitos ("Ilusão de Amor: Superstar"); só palavras comuns
+                        // em outra ordem ("Primeiro os Filhos, Depois o Amor" × "O Filho do Meu Primeiro
+                        // Amor") ou poucas ("Torre de Deus") precisam da confirmação da capa
+                        if shared.contains(where: { !TitleConcepts.isCommon($0) && TitleConcepts.isDistinctive($0) }) {
+                            reason = "conceitos raros"
+                        } else if score == 1 && shared.count >= 3 {
+                            reason = "conceitos"
+                        } else if coverClose(index, coverHash, maxDistance: 14) {
+                            reason = "conceitos + capa"
+                        }
+                    } else if score >= 0.5 && coverClose(index, coverHash, maxDistance: 10) {
+                        // Tradução parcial ("Herói de Classe Desastre" × "Disaster-Class Hero"): exige a capa
+                        reason = "conceitos parciais + capa"
+                    }
+                    if let reason {
+                        best = (index, score, "\(reason) \(String(format: "%.2f", score)) \(shared.sorted())")
+                    }
+                }
+            }
+        }
+        return best.map { ($0.index, $0.reason) }
+    }
+
+    // MARK: - Capas
+
+    private func coverClose(_ index: Int, _ hash: UInt64?, maxDistance: Int) -> Bool {
+        guard let hash else { return false }
+        return covers.contains { $0.work == index && CoverFingerprint.distance($0.hash, hash) <= maxDistance }
+    }
+
+    /// Mesma imagem em obras diferentes da mesma fonte = capa genérica do site.
+    private mutating func isGeneric(_ hash: UInt64, sourceId: String) -> Bool {
+        if genericCovers.contains(where: { CoverFingerprint.distance($0, hash) <= 3 }) { return true }
+        if covers.contains(where: { $0.sourceId == sourceId && CoverFingerprint.distance($0.hash, hash) <= 3 }) {
+            genericCovers.append(hash)
+            return true
+        }
+        return false
+    }
+
+    private func coverMatch(_ hash: UInt64, tokens: Set<String>, sourceId: String) -> (index: Int, reason: String)? {
+        var best: (index: Int, distance: Int)?
+        var nearby = Set<Int>()
+        for entry in covers {
+            let distance = CoverFingerprint.distance(hash, entry.hash)
+            guard distance <= 4 else { continue }
+            nearby.insert(entry.work)
+            guard !sourceIds[entry.work].contains(sourceId) else { continue }
+            let workTokens = Set(conceptSets[entry.work].joined())
+            guard tokens.intersection(workTokens).contains(where: TitleConcepts.isDistinctive) else { continue }
+            if distance < (best?.distance ?? Int.max) { best = (entry.work, distance) }
+        }
+        // A mesma imagem em várias obras distintas não identifica nenhuma delas
+        guard nearby.count == 1, let best else { return nil }
+        let shared = tokens.intersection(Set(conceptSets[best.index].joined())).sorted()
+        return (best.index, "capa d=\(best.distance) \(shared)")
+    }
+}
