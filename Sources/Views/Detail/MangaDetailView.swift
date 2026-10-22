@@ -22,6 +22,7 @@ final class WorkDetailModel {
     /// Scans e fontes escondidas (`ScanlatorFilter`) e fonte preferida nos capítulos repetidos.
     var excluded: Set<String> = [] { didSet { regroup() } }
     var preferredSourceId: String? { didSet { regroup() } }
+    var blockedRefs: [WorkSourceRef] = []
 
     private var userPickedLanguage = false
     private var filter: LanguageFilter = .all
@@ -107,6 +108,7 @@ final class WorkDetailModel {
         pendingSources = loader.pendingSources
         work = state.work
         failures = state.failures
+        blockedRefs = state.blockedRefs
         rawChapters = state.chapters
         regroup()
 
@@ -156,6 +158,7 @@ public struct MangaDetailView: View {
     @State private var duplicate: Manga?
     @State private var searchQuery: SearchRequest?
     @State private var downloadVersion = 0
+    @State private var webTarget: WebTarget?
 
     private let mangaId: String
 
@@ -234,6 +237,7 @@ public struct MangaDetailView: View {
                     genresRow
                     synopsis
                     notesRow
+                    blockedBanner
                     languageSection
                 }
                 .listRowSeparator(.hidden)
@@ -258,6 +262,11 @@ public struct MangaDetailView: View {
                 initialChapterIndex: list.firstIndex(where: { $0.id == chapter.id }) ?? 0,
                 coverUrl: coverUrl
             )
+        }
+        .sheet(item: $webTarget) { target in
+            SourceWebView(title: target.title, url: target.url) {
+                Task { await model.reload() }
+            }
         }
         .sheet(isPresented: $showChapterOptions) {
             ChapterOptionsSheet(flags: flagsBinding)
@@ -835,6 +844,26 @@ public struct MangaDetailView: View {
     private func missingTotal(_ chapters: [SourceChapterItem]) -> Int {
         let numbers = Array(Set(chapters.map(\.chapterNumber).filter { $0 > 0 }.map(floor))).sorted()
         return zip(numbers, numbers.dropFirst()).reduce(0) { $0 + ChapterGaps.missing(between: $1.0, and: $1.1) }
+    }
+
+    /// Fontes que pediram a verificação do Cloudflare: o usuário resolve na WebView.
+    @ViewBuilder
+    private var blockedBanner: some View {
+        ForEach(model.blockedRefs, id: \.id) { ref in
+            if let source = SourceManager.shared.getSource(id: ref.sourceId), let url = URL(string: source.baseUrl) {
+                Button {
+                    webTarget = WebTarget(title: source.name, url: url)
+                } label: {
+                    Label("\(source.name) pediu uma verificação anti-bot. Toque para resolver.", systemImage: "shield.lefthalf.filled")
+                        .font(.footnote)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(10)
+                        .background(Color.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal)
+            }
+        }
     }
 
     // MARK: - Biblioteca

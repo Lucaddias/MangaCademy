@@ -168,7 +168,7 @@ final class BackupSettings {
 @MainActor
 enum BackupManager {
     /// Preferências que vão no backup (as do app; nada do sistema).
-    static let preferencePrefixes = ["reader_", "library_", "update_", "chapter_", "download_", "catalog_", "show_nsfw", "block_adult", "incognito", "security_", "appearance_", "disabled_sources", "pinned_sources", "track_"]
+    static let preferencePrefixes = ["reader_", "library_", "update_", "chapter_", "download_", "catalog_", "show_nsfw", "block_adult", "incognito", "security_", "appearance_", "disabled_", "pinned_sources", "default_reader", "track_"]
 
     static var backupsDirectory: URL {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]

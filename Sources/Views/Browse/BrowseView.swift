@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 /// Catálogo unificado de todas as fontes Keiyoushi com motor iOS.
 /// O filtro de idioma substitui o antigo seletor "Fontes / Extensões".
@@ -7,6 +8,9 @@ public struct BrowseView: View {
     @AppStorage(Preferences.Key.showNsfwSources) private var showNsfw = Preferences.Default.showNsfwSources
     @AppStorage(Preferences.Key.blockAdultTags) private var blockAdult = Preferences.Default.blockAdultTags
 
+    @AppStorage("catalog_browse_section") private var section = "catalog"
+    @Query(filter: #Predicate<Manga> { $0.isFavorite == true }) private var favorites: [Manga]
+    @State private var sourceSettings = SourceSettings.shared
     @State private var feed = CatalogFeed()
     @State private var sort: BrowseSort = .popular
     @State private var searchText = ""
@@ -30,14 +34,40 @@ public struct BrowseView: View {
 
     public var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                filterBar
-                content
+            Group {
+                if section == "sources" {
+                    SourcesListView()
+                } else {
+                    catalog
+                }
             }
             .navigationTitle("Explorar")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Picker("Explorar", selection: $section) {
+                        Text("Catálogo").tag("catalog")
+                        Text("Fontes").tag("sources")
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 210)
+                }
+            }
             .navigationDestination(for: UnifiedWork.self) { work in
                 MangaDetailView(work: work)
+            }
+            .navigationDestination(for: SourceRoute.self) { route in
+                if let source = SourceManager.shared.getSource(id: route.id) {
+                    SourceBrowseView(source: source)
+                }
+            }
+        }
+    }
+
+    private var catalog: some View {
+            VStack(spacing: 0) {
+                filterBar
+                content
             }
             .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Buscar em todas as fontes")
             .onSubmit(of: .search) {
@@ -58,7 +88,8 @@ public struct BrowseView: View {
             .task {
                 if feed.totalSources == 0 { reload() }
             }
-        }
+            .onChange(of: sourceSettings.disabledSources) { _, _ in reload() }
+            .onChange(of: sourceSettings.disabledLanguages) { _, _ in reload() }
     }
 
     // MARK: - Filtros
@@ -134,11 +165,9 @@ public struct BrowseView: View {
         } else {
             ScrollView {
                 LazyVGrid(columns: columns, spacing: 16) {
+                    let index = LibraryIndex(favorites)
                     ForEach(feed.works) { work in
-                        NavigationLink(value: work) {
-                            MangaGridItem(work: work, filter: filter)
-                        }
-                        .buttonStyle(.plain)
+                        CatalogCell(work: work, filter: filter, index: index)
                         .onAppear { feed.onAppear(of: work) }
                     }
                 }
