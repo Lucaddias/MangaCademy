@@ -1,9 +1,15 @@
 import SwiftUI
+import SwiftData
 
 public struct SettingsView: View {
     @State private var cacheCleared = false
     @State private var repository = KeiyoushiRepository.shared
     @State private var readerSettings = ReaderSettings.shared
+    @State private var librarySettings = LibrarySettings.shared
+    @State private var downloads = DownloadManager.shared
+    @Query(sort: \MangaCategory.order) private var categories: [MangaCategory]
+    @AppStorage("chapter_swipe_start") private var swipeStart = ChapterSwipeAction.toggleBookmark.rawValue
+    @AppStorage("chapter_swipe_end") private var swipeEnd = ChapterSwipeAction.toggleRead.rawValue
     @AppStorage(Preferences.Key.showNsfwSources) private var showNsfw = Preferences.Default.showNsfwSources
     @AppStorage(Preferences.Key.blockAdultTags) private var blockAdult = Preferences.Default.blockAdultTags
     @AppStorage(Preferences.Key.readerVolumeButtons) private var volumeButtons = Preferences.Default.readerVolumeButtons
@@ -62,6 +68,22 @@ public struct SettingsView: View {
                     }
                 }
 
+                Section("Biblioteca") {
+                    NavigationLink("Categorias (\(categories.count))") { CategoryManagerView() }
+                    NavigationLink("Atualizações") { UpdateSettingsView() }
+                    Picker("Categoria ao adicionar", selection: $librarySettings.defaultCategory) {
+                        Text("Padrão").tag("")
+                        Text("Perguntar sempre").tag("ask")
+                        ForEach(categories) { Text($0.name).tag($0.id) }
+                    }
+                    Picker("Deslizar para a direita", selection: $swipeStart) {
+                        ForEach(ChapterSwipeAction.allCases) { Text($0.title).tag($0.rawValue) }
+                    }
+                    Picker("Deslizar para a esquerda", selection: $swipeEnd) {
+                        ForEach(ChapterSwipeAction.allCases) { Text($0.title).tag($0.rawValue) }
+                    }
+                }
+
                 Section {
                     Toggle("Bloquear obras com tag adulta", isOn: $blockAdult)
                 } header: {
@@ -83,6 +105,23 @@ public struct SettingsView: View {
                     if volumeButtons {
                         Text(ReaderPreferences.volumeButtonsFooter(inverted: invertVolumeButtons))
                     }
+                }
+
+                Section("Downloads") {
+                    NavigationLink {
+                        DownloadQueueView()
+                    } label: {
+                        LabeledContent("Fila de downloads", value: downloads.queue.isEmpty ? "" : "\(downloads.queue.count)")
+                    }
+                    NavigationLink("Ajustes de download") { DownloadSettingsView() }
+                }
+
+                Section("Dados") {
+                    NavigationLink("Estatísticas") { StatsView() }
+                    NavigationLink("Rastreamento") { TrackersSettingsView() }
+                    NavigationLink("Backup e restauração") { BackupView() }
+                    NavigationLink("Aparência e segurança") { SecurityAppearanceView() }
+                    NavigationLink("Limpeza e avançado") { DataCleanupView() }
                 }
 
                 Section(header: Text("Armazenamento & Cache")) {

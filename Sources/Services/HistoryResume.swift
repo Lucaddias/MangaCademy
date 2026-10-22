@@ -50,7 +50,7 @@ enum HistoryResume {
 
         let saved = ChapterStore.records(mangaId: entry.mangaId, context: context)
             .filter { $0.dateFetch != nil }
-            .map(item(from:))
+            .map(ChapterStore.item(from:))
         var list: [SourceChapterItem]
         if !saved.isEmpty {
             list = saved
@@ -90,19 +90,5 @@ enum HistoryResume {
         }
         // Capítulo sumiu da fonte: lê só ele.
         return Resumed(chapters: [target], index: 0)
-    }
-
-    private static func item(from record: Chapter) -> SourceChapterItem {
-        SourceChapterItem(
-            remoteUrl: record.remoteUrl,
-            name: record.name,
-            chapterNumber: record.chapterNumber,
-            orderIndex: record.orderIndex,
-            scanlator: record.scanlator,
-            uploadDate: record.uploadDate,
-            language: record.language,
-            sourceId: record.sourceId ?? "",
-            mangaRemoteUrl: record.mangaRemoteUrl ?? ""
-        )
     }
 }

@@ -86,6 +86,16 @@ public final class SourceManager {
         getSource(id: id)?.name ?? id
     }
 
+    /// Fontes para a lista "Fontes" do Explorar (respeita +18 e as desativadas).
+    public func browsableSources(includeNsfw: Bool, includeDisabled: Bool = false) -> [MangaSource] {
+        lock.lock()
+        let all = sources
+        let nsfw = nsfwIds
+        lock.unlock()
+        let settings = SourceSettings.shared
+        return all.filter { (includeNsfw || !nsfw.contains($0.id)) && (includeDisabled || settings.isEnabled($0)) }
+    }
+
     public func isNsfw(_ sourceId: String) -> Bool {
         lock.lock()
         defer { lock.unlock() }
@@ -112,8 +122,9 @@ public final class SourceManager {
             return (priority, langRank, safe.contains(s.id) ? 0 : 1, s.name.lowercased())
         }
 
+        let settings = SourceSettings.shared
         return all
-            .filter { includeNsfw || !nsfw.contains($0.id) }
+            .filter { (includeNsfw || !nsfw.contains($0.id)) && settings.isEnabled($0) }
             .compactMap { source -> MangaSource? in
                 if let scoped = source as? LanguageScopedSource {
                     return scoped.scoped(to: filter, includeNsfw: includeNsfw)

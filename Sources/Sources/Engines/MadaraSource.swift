@@ -29,10 +29,12 @@ public final class MadaraSource: ThemeSource, MangaSource {
                 fields.append(("vars[meta_query][1][key]", "_wp_manga_chapter_type"))
                 fields.append(("vars[meta_query][1][value]", "manga"))
             }
-            let doc = try await http.postFormHTML("\(baseUrl)/wp-admin/admin-ajax.php", fields: fields, headers: xhr)
-            let items = parseArchive(doc)
-            if !items.isEmpty || page > 1 {
-                return SourceMangaPage(items: items, hasNextPage: items.count >= pageSize)
+            // Se o admin-ajax falhar (desativado ou atrás do Cloudflare), usa a busca normal.
+            if let doc = try? await http.postFormHTML("\(baseUrl)/wp-admin/admin-ajax.php", fields: fields, headers: xhr) {
+                let items = parseArchive(doc)
+                if !items.isEmpty || page > 1 {
+                    return SourceMangaPage(items: items, hasNextPage: items.count >= pageSize)
+                }
             }
         }
         var url = baseUrl + "/"
@@ -59,10 +61,9 @@ public final class MadaraSource: ThemeSource, MangaSource {
                 if !items.isEmpty || page > 1 {
                     return SourceMangaPage(items: items, hasNextPage: items.count >= pageSize)
                 }
-            } catch HTTPError.blocked {
-                throw HTTPError.blocked
             } catch {
-                // Alguns sites desativam o admin-ajax: tenta a página de arquivo
+                // Alguns sites desativam o admin-ajax ou só protegem ele com Cloudflare:
+                // tenta a página de arquivo (se ela também for bloqueada, o erro sobe dali).
             }
         }
         var url = "\(baseUrl)/\(mangaSubString)/"

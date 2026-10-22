@@ -2,6 +2,11 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.lucadias.MihonReader.library-update</string>
+		<string>com.lucadias.MihonReader.backup</string>
+	</array>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
@@ -29,6 +34,57 @@
 	</dict>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Para salvar páginas e capas na sua galeria de fotos.</string>
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Para desbloquear o app quando o bloqueio estiver ativado.</string>
+	<key>UIApplicationShortcutItems</key>
+	<array>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>continue</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Continuar lendo</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>book</string>
+		</dict>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>updates</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Novidades</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>bell</string>
+		</dict>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>browse</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Explorar</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>safari</string>
+		</dict>
+	</array>
+	<key>AniListClientID</key>
+	<string></string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.lucadias.MihonReader</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>mangacademy</string>
+			</array>
+		</dict>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>processing</string>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UIRequiredDeviceCapabilities</key>

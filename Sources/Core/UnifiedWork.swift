@@ -141,8 +141,11 @@ extension UnifiedWork {
                 languages: []
             )]
         }
-        self = UnifiedWork(id: manga.id, title: manga.title, coverUrl: manga.coverUrl, refs: refs)
+        // Capa escolhida pelo usuário vale mais que a da fonte.
+        let cover = CustomCoverStore.url(for: manga.customCoverPath)?.absoluteString ?? manga.coverUrl
+        self = UnifiedWork(id: manga.id, title: manga.title, coverUrl: cover, refs: refs)
             ?? UnifiedWork(ref: refs[0])
+        if manga.customCoverPath != nil { coverSourceId = nil }
     }
 
     /// Obra de uma fonte só a partir do id salvo ("fonte:endereço"), quando ela não está na biblioteca.

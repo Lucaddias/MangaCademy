@@ -8,6 +8,8 @@ public struct WorkLoadState {
     /// Capítulos de todas as fontes, já com fonte, obra e idioma preenchidos.
     public private(set) var chapters: [SourceChapterItem] = []
     public private(set) var failures: [String] = []
+    /// Fontes que pediram verificação anti-bot (Cloudflare).
+    public private(set) var blockedRefs: [WorkSourceRef] = []
     private var details: [(language: String, detail: SourceMangaDetail)] = []
 
     public init(work: UnifiedWork) {
@@ -35,6 +37,10 @@ public struct WorkLoadState {
 
     public mutating func addFailure(_ message: String) {
         failures.append(message)
+    }
+
+    public mutating func addBlocked(_ ref: WorkSourceRef) {
+        blockedRefs.append(ref)
     }
 
     /// Completa nos capítulos a fonte, a obra e o idioma (quando a fonte não informa).
@@ -117,12 +123,15 @@ public final class WorkLoader {
     public var onUpdate: ((WorkLoader) -> Void)?
 
     private let filter: LanguageFilter
+    /// Procura a obra também no MangaDex e no ComicK (desligado na atualização da biblioteca).
+    private let lookupOtherLanguages: Bool
     private var loadedRefIds = Set<String>()
     private static let maxConcurrentSources = 6
 
-    public init(work: UnifiedWork, filter: LanguageFilter) {
+    public init(work: UnifiedWork, filter: LanguageFilter, lookupOtherLanguages: Bool = true) {
         self.state = WorkLoadState(work: work)
         self.filter = filter
+        self.lookupOtherLanguages = lookupOtherLanguages
     }
 
     /// Consulta todas as fontes da obra (as do idioma do filtro primeiro, no máximo 6 ao mesmo
@@ -135,8 +144,10 @@ public final class WorkLoader {
         }
         await withTaskGroup(of: Void.self) { group in
             var pending = refs.makeIterator()
-            group.addTask { await self.lookupMultiLanguage(sourceId: "mangadex") }
-            group.addTask { await self.lookupMultiLanguage(sourceId: "comick") }
+            if lookupOtherLanguages {
+                group.addTask { await self.lookupMultiLanguage(sourceId: "mangadex") }
+                group.addTask { await self.lookupMultiLanguage(sourceId: "comick") }
+            }
             for _ in 0..<Self.maxConcurrentSources {
                 guard let ref = pending.next() else { break }
                 group.addTask { await self.loadRef(ref) }
@@ -162,6 +173,7 @@ public final class WorkLoader {
             let (detail, chapters) = try await source.fetchDetails(remoteUrl: ref.remoteUrl)
             state.add(ref: ref, sourceLanguage: source.language, detail: detail, chapters: chapters)
         } catch {
+            if case HTTPError.blocked = error { state.addBlocked(ref) }
             state.addFailure("\(ref.sourceName): \(error.localizedDescription)")
         }
         pendingSources -= 1

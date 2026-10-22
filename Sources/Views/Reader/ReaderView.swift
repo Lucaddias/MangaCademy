@@ -59,6 +59,8 @@ public struct ReaderView: View {
     @State private var settings = ReaderSettings.shared
     @State private var startChapterIndex: Int
     @State private var segments: [ReaderSegment] = []
+    /// Capítulos abertos nesta sessão (para "apagar depois de ler").
+    @State private var visitedChapters: Set<Int> = []
     /// Id do `ReaderDisplayItem` na tela.
     @State private var position: String?
     @State private var isLoading = true
@@ -339,8 +341,17 @@ public struct ReaderView: View {
         .onChange(of: settings.keepScreenOn) { _, _ in applyScreenSettings() }
         .onChange(of: settings.tapZones) { _, _ in flashTapZones() }
         .onChange(of: settings.tapInversion) { _, _ in flashTapZones() }
+        .onChange(of: currentChapterIndex, initial: true) { _, index in
+            visitedChapters.insert(index)
+            AutoDownloader.downloadAhead(from: index, in: allChapters, mangaId: mangaId, mangaTitle: mangaTitle, context: modelContext)
+        }
         .onDisappear {
             saveProgress()
+            AutoDownloader.deleteRead(
+                visitedChapters.filter(allChapters.indices.contains).map { allChapters[$0] },
+                mangaId: mangaId,
+                context: modelContext
+            )
             UIApplication.shared.isIdleTimerDisabled = false
             AppDelegate.lockOrientation(.all)
         }

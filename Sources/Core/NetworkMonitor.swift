@@ -4,6 +4,8 @@ import Network
 /// Tipo de conexão atual (para "só no Wi‑Fi" no pré-carregamento, downloads e atualizações).
 public final class NetworkMonitor: @unchecked Sendable {
     public static let shared = NetworkMonitor()
+    /// A conexão mudou (ex.: entrou no Wi‑Fi).
+    public static let changed = Notification.Name("NetworkMonitorChanged")
 
     private let monitor = NWPathMonitor()
     private let lock = NSLock()
@@ -15,6 +17,7 @@ public final class NetworkMonitor: @unchecked Sendable {
             self.lock.lock()
             self.path = path
             self.lock.unlock()
+            NotificationCenter.default.post(name: NetworkMonitor.changed, object: nil)
         }
         monitor.start(queue: DispatchQueue(label: "NetworkMonitor"))
     }

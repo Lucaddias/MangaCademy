@@ -53,6 +53,7 @@ enum ChapterStore {
         }
         refreshUnreadCount(mangaId: mangaId, context: context)
         try? context.save()
+        if read { TrackerManager.shared.chapterRead(chapter.chapterNumber, mangaId: mangaId, context: context) }
     }
 
     static func setBookmarked(_ bookmarked: Bool, chapter: SourceChapterItem, mangaId: String, context: ModelContext) {
@@ -120,7 +121,72 @@ enum ChapterStore {
             }
         }
         refreshUnreadCount(manga: manga, context: context)
+        refreshStats(manga: manga, records: Array(byId.values), now: now)
         try? context.save()
+    }
+
+    /// Números usados para ordenar a biblioteca e prever o próximo capítulo.
+    static func refreshStats(manga: Manga, records: [Chapter], now: Date = Date()) {
+        let language = manga.preferredLanguage ?? mostCommonLanguage(records)
+        let inLanguage = records.filter { ($0.language ?? "all") == (language ?? "all") }
+        let count = Set(inLanguage.map(progressKey)).count
+        if manga.chapterCount != count { manga.chapterCount = count }
+        let latest = records.compactMap(\.uploadDate).max()
+        if manga.latestUploadAt != latest { manga.latestUploadAt = latest }
+        // "Última atualização" = quando entrou capítulo novo.
+        if let newest = records.compactMap(\.dateFetch).max(), newest > (manga.favoriteAt ?? .distantPast) {
+            manga.lastUpdated = newest
+        }
+        manga.nextUpdateAt = UpdateSchedule.nextUpdate(uploadDates: inLanguage.compactMap(\.uploadDate), now: now)
+    }
+
+    /// Marca todos os capítulos salvos da obra como lidos ou não lidos.
+    static func setAllRead(_ read: Bool, mangaId: String, context: ModelContext) {
+        for record in records(mangaId: mangaId, context: context) where record.isRead != read {
+            record.isRead = read
+            if read { record.lastReadDate = Date() }
+        }
+        refreshUnreadCount(mangaId: mangaId, context: context)
+        try? context.save()
+    }
+
+    /// Marca como lidos todos os capítulos antes deste na ordem de leitura (números menores).
+    static func markPreviousRead(before chapter: SourceChapterItem, in list: [SourceChapterItem], mangaId: String, context: ModelContext) {
+        guard let index = list.firstIndex(where: { $0.id == chapter.id }) else { return }
+        // A lista está do mais novo para o mais antigo: os anteriores vêm depois.
+        for item in list[(index + 1)...] {
+            let record = ensureRecord(for: item, mangaId: mangaId, context: context)
+            if !record.isRead {
+                record.isRead = true
+                record.lastReadDate = Date()
+            }
+        }
+        refreshUnreadCount(mangaId: mangaId, context: context)
+        try? context.save()
+    }
+
+    /// Lista salva de uma obra da biblioteca no idioma dela, sem repetição, do mais novo para o
+    /// mais antigo (para abrir o leitor sem rede).
+    static func savedChapterList(for manga: Manga, context: ModelContext) -> [SourceChapterItem] {
+        let saved = records(mangaId: manga.id, context: context).filter { $0.dateFetch != nil }
+        let byLanguage = SourceAggregator.shared.chaptersByLanguage(saved.map(item(from:)), preferredSourceId: manga.preferredSourceId)
+        let language = manga.preferredLanguage ?? mostCommonLanguage(saved) ?? "all"
+        let excluded = Set(manga.excludedScanlators)
+        return (byLanguage[language] ?? byLanguage.values.first ?? []).filter { !ScanlatorFilter.isExcluded($0, excluded: excluded) }
+    }
+
+    static func item(from record: Chapter) -> SourceChapterItem {
+        SourceChapterItem(
+            remoteUrl: record.remoteUrl,
+            name: record.name,
+            chapterNumber: record.chapterNumber,
+            orderIndex: record.orderIndex,
+            scanlator: record.scanlator,
+            uploadDate: record.uploadDate,
+            language: record.language,
+            sourceId: record.sourceId ?? "",
+            mangaRemoteUrl: record.mangaRemoteUrl ?? ""
+        )
     }
 
     // MARK: - Não lidos
