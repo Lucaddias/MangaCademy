@@ -1,11 +1,13 @@
 import SwiftUI
 import SwiftData
+import CoreSpotlight
 
 public struct RootView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @State private var showStoreResetAlert: Bool
     @State private var navigation = AppNavigation.shared
+    @State private var appSettings = AppSettings.shared
     @Query private var recentChapters: [Chapter]
     @Query(filter: #Predicate<Manga> { $0.isFavorite == true }) private var favorites: [Manga]
 
@@ -56,6 +58,18 @@ public struct RootView: View {
                 }
                 .tag(AppNavigation.Tab.settings)
         }
+        .modifier(AppLockModifier())
+        .preferredColorScheme(appSettings.colorScheme)
+        .sheet(isPresented: Binding(get: { !appSettings.onboardingDone }, set: { if !$0 { appSettings.onboardingDone = true } })) {
+            OnboardingView()
+        }
+        .onOpenURL { AppLinks.open($0) }
+        .onContinueUserActivity(CSSearchableItemActionType) { activity in
+            guard let id = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String else { return }
+            navigation.tab = .library
+            navigation.pendingMangaId = id
+        }
+        .task(id: favorites.count) { AppLinks.indexLibrary(favorites) }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 BackgroundTasks.catchUpIfNeeded(context: modelContext)

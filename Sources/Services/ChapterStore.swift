@@ -53,6 +53,7 @@ enum ChapterStore {
         }
         refreshUnreadCount(mangaId: mangaId, context: context)
         try? context.save()
+        if read { TrackerManager.shared.chapterRead(chapter.chapterNumber, mangaId: mangaId, context: context) }
     }
 
     static func setBookmarked(_ bookmarked: Bool, chapter: SourceChapterItem, mangaId: String, context: ModelContext) {

@@ -38,6 +38,48 @@
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Para desbloquear o app quando o bloqueio estiver ativado.</string>
+	<key>UIApplicationShortcutItems</key>
+	<array>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>continue</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Continuar lendo</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>book</string>
+		</dict>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>updates</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Novidades</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>bell</string>
+		</dict>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>browse</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Explorar</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>safari</string>
+		</dict>
+	</array>
+	<key>AniListClientID</key>
+	<string></string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.lucadias.MihonReader</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>mangacademy</string>
+			</array>
+		</dict>
+	</array>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>

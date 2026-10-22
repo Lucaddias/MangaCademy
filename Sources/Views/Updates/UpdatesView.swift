@@ -11,6 +11,8 @@ final class AppNavigation {
     enum Tab: Hashable { case library, updates, history, browse, settings }
 
     var tab: Tab = .library
+    /// Obra a abrir na biblioteca (Spotlight, link `mangacademy://obra/...`).
+    var pendingMangaId: String?
     /// Última vez que a aba Novidades foi aberta (o selo conta o que veio depois).
     var updatesLastViewed: Date {
         didSet { UserDefaults.standard.set(updatesLastViewed, forKey: "updates_last_viewed") }

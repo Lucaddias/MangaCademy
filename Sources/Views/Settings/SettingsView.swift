@@ -117,7 +117,11 @@ public struct SettingsView: View {
                 }
 
                 Section("Dados") {
+                    NavigationLink("Estatísticas") { StatsView() }
+                    NavigationLink("Rastreamento") { TrackersSettingsView() }
                     NavigationLink("Backup e restauração") { BackupView() }
+                    NavigationLink("Aparência e segurança") { SecurityAppearanceView() }
+                    NavigationLink("Limpeza e avançado") { DataCleanupView() }
                 }
 
                 Section(header: Text("Armazenamento & Cache")) {

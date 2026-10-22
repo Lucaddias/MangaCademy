@@ -159,6 +159,7 @@ public struct MangaDetailView: View {
     @State private var searchQuery: SearchRequest?
     @State private var downloadVersion = 0
     @State private var webTarget: WebTarget?
+    @State private var showTracking = false
 
     private let mangaId: String
 
@@ -262,6 +263,9 @@ public struct MangaDetailView: View {
                 initialChapterIndex: list.firstIndex(where: { $0.id == chapter.id }) ?? 0,
                 coverUrl: coverUrl
             )
+        }
+        .sheet(isPresented: $showTracking) {
+            TrackingSheet(mangaId: progressId, title: model.displayTitle)
         }
         .sheet(item: $webTarget) { target in
             SourceWebView(title: target.title, url: target.url) {
@@ -417,6 +421,7 @@ public struct MangaDetailView: View {
                         Button { categoryTargets = [localManga] } label: { Label("Editar categorias", systemImage: "folder") }
                         Button { showNotes = true } label: { Label("Notas", systemImage: "note.text") }
                     }
+                    Button { showTracking = true } label: { Label("Rastreamento", systemImage: "chart.line.uptrend.xyaxis") }
                     Button { showSources = true } label: { Label("Fontes desta obra", systemImage: "square.stack") }
                     Button { showScanlators = true } label: { Label("Scans e fonte preferida", systemImage: "person.2") }
                     Button { if !model.chapters.isEmpty { selecting = true } } label: { Label("Selecionar capítulos", systemImage: "checkmark.circle") }

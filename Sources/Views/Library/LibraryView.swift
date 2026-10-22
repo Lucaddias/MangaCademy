@@ -144,6 +144,11 @@ public struct LibraryView: View {
                 ReaderView(mangaId: target.mangaId, mangaTitle: target.title, chapters: target.chapters, initialChapterIndex: target.index, coverUrl: target.coverUrl)
             }
             .task(id: favoriteMangas.count) { refreshDownloadCounts() }
+            .onChange(of: AppNavigation.shared.pendingMangaId, initial: true) { _, id in
+                guard let id, let manga = favoriteMangas.first(where: { $0.id == id }) else { return }
+                AppNavigation.shared.pendingMangaId = nil
+                path = [UnifiedWork(libraryManga: manga)]
+            }
             .onReceive(NotificationCenter.default.publisher(for: .downloadsChanged)) { _ in refreshDownloadCounts() }
         }
     }
