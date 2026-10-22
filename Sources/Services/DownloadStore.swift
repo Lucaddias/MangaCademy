@@ -85,6 +85,12 @@ public final class DownloadStore: @unchecked Sendable {
         return total
     }
 
+    /// Capítulos baixados de uma obra.
+    public func downloadedCount(mangaId: String) -> Int {
+        let dirs = (try? fm.contentsOfDirectory(at: mangaDirectory(mangaId: mangaId), includingPropertiesForKeys: nil)) ?? []
+        return dirs.filter { fm.fileExists(atPath: $0.appendingPathComponent("pages.json").path) }.count
+    }
+
     public func size(mangaId: String) -> Int64 { size(of: mangaDirectory(mangaId: mangaId)) }
     public var totalSize: Int64 { size(of: root) }
 }

@@ -1,9 +1,14 @@
 import SwiftUI
+import SwiftData
 
 public struct SettingsView: View {
     @State private var cacheCleared = false
     @State private var repository = KeiyoushiRepository.shared
     @State private var readerSettings = ReaderSettings.shared
+    @State private var librarySettings = LibrarySettings.shared
+    @Query(sort: \MangaCategory.order) private var categories: [MangaCategory]
+    @AppStorage("chapter_swipe_start") private var swipeStart = ChapterSwipeAction.toggleBookmark.rawValue
+    @AppStorage("chapter_swipe_end") private var swipeEnd = ChapterSwipeAction.toggleRead.rawValue
     @AppStorage(Preferences.Key.showNsfwSources) private var showNsfw = Preferences.Default.showNsfwSources
     @AppStorage(Preferences.Key.blockAdultTags) private var blockAdult = Preferences.Default.blockAdultTags
     @AppStorage(Preferences.Key.readerVolumeButtons) private var volumeButtons = Preferences.Default.readerVolumeButtons
@@ -59,6 +64,21 @@ public struct SettingsView: View {
                         } else if let updated = repository.lastUpdated {
                             Text("Índice de \(updated.formatted(date: .abbreviated, time: .shortened)). Atualizar traz domínios novos dos sites.")
                         }
+                    }
+                }
+
+                Section("Biblioteca") {
+                    NavigationLink("Categorias (\(categories.count))") { CategoryManagerView() }
+                    Picker("Categoria ao adicionar", selection: $librarySettings.defaultCategory) {
+                        Text("Padrão").tag("")
+                        Text("Perguntar sempre").tag("ask")
+                        ForEach(categories) { Text($0.name).tag($0.id) }
+                    }
+                    Picker("Deslizar para a direita", selection: $swipeStart) {
+                        ForEach(ChapterSwipeAction.allCases) { Text($0.title).tag($0.rawValue) }
+                    }
+                    Picker("Deslizar para a esquerda", selection: $swipeEnd) {
+                        ForEach(ChapterSwipeAction.allCases) { Text($0.title).tag($0.rawValue) }
                     }
                 }
 

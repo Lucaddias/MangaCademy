@@ -5,8 +5,9 @@ public final class SourceAggregator {
 
     /// Agrupa capítulos de várias fontes por idioma e remove duplicatas dentro de cada idioma.
     /// Quando o mesmo capítulo existe em mais de uma fonte no mesmo idioma, fica a versão da
-    /// fonte com mais capítulos naquele idioma (a mais completa).
-    public func chaptersByLanguage(_ chapters: [SourceChapterItem]) -> [String: [SourceChapterItem]] {
+    /// fonte com mais capítulos naquele idioma (a mais completa), salvo se o usuário escolheu
+    /// uma fonte preferida para a obra.
+    public func chaptersByLanguage(_ chapters: [SourceChapterItem], preferredSourceId: String? = nil) -> [String: [SourceChapterItem]] {
         var byLanguage: [String: [SourceChapterItem]] = [:]
         for ch in chapters {
             byLanguage[ch.language ?? "all", default: []].append(ch)
@@ -23,6 +24,10 @@ public final class SourceAggregator {
             for ch in list {
                 let key = Self.dedupeKey(chapterNumber: ch.chapterNumber, name: ch.name)
                 if let existing = best[key] {
+                    if let preferredSourceId, existing.sourceId != ch.sourceId {
+                        if ch.sourceId == preferredSourceId { best[key] = ch; continue }
+                        if existing.sourceId == preferredSourceId { continue }
+                    }
                     let a = availability[ch.sourceId] ?? 0
                     let b = availability[existing.sourceId] ?? 0
                     if a > b || (a == b && (ch.scanlator?.count ?? 0) > (existing.scanlator?.count ?? 0)) {
