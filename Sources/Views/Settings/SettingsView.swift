@@ -106,6 +106,10 @@ public struct SettingsView: View {
                     }
                 }
 
+                Section("Dados") {
+                    NavigationLink("Backup e restauração") { BackupView() }
+                }
+
                 Section(header: Text("Armazenamento & Cache")) {
                     Button(role: .destructive) {
                         ImageCache.shared.clearCache()

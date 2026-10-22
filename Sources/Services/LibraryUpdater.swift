@@ -220,12 +220,34 @@ enum UpdateNotifier {
 /// Tarefas em segundo plano. O iOS decide quando rodar: é "melhor esforço".
 enum BackgroundTasks {
     static let libraryUpdateId = "com.lucadias.MihonReader.library-update"
+    static let backupId = "com.lucadias.MihonReader.backup"
 
     @MainActor
     static func register() {
         BGTaskScheduler.shared.register(forTaskWithIdentifier: libraryUpdateId, using: nil) { task in
             Task { @MainActor in handleLibraryUpdate(task) }
         }
+        BGTaskScheduler.shared.register(forTaskWithIdentifier: backupId, using: nil) { task in
+            Task { @MainActor in handleBackup(task) }
+        }
+    }
+
+    @MainActor
+    static func scheduleBackup() {
+        let hours = BackupSettings.shared.intervalHours
+        BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: backupId)
+        guard hours > 0 else { return }
+        let request = BGProcessingTaskRequest(identifier: backupId)
+        request.earliestBeginDate = (BackupSettings.shared.lastAutomatic ?? Date()).addingTimeInterval(Double(hours) * 3600)
+        try? BGTaskScheduler.shared.submit(request)
+    }
+
+    @MainActor
+    private static func handleBackup(_ task: BGTask) {
+        guard let container = AppStore.container else { task.setTaskCompleted(success: false); return }
+        let ok = (try? BackupManager.writeAutomaticBackup(context: ModelContext(container))) != nil
+        scheduleBackup()
+        task.setTaskCompleted(success: ok)
     }
 
     @MainActor
@@ -257,6 +279,11 @@ enum BackgroundTasks {
         let last = LibraryUpdater.shared.lastRun ?? .distantPast
         if Date().timeIntervalSince(last) > Double(hours) * 3600 {
             Task { await LibraryUpdater.shared.update(categoryId: nil, context: context, automatic: true) }
+        }
+        let backupHours = BackupSettings.shared.intervalHours
+        if backupHours > 0, Date().timeIntervalSince(BackupSettings.shared.lastAutomatic ?? .distantPast) > Double(backupHours) * 3600 {
+            try? BackupManager.writeAutomaticBackup(context: context)
+            scheduleBackup()
         }
     }
 }

@@ -29,6 +29,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         UNUserNotificationCenter.current().delegate = self
         BackgroundTasks.register()
         BackgroundTasks.scheduleLibraryUpdate()
+        BackgroundTasks.scheduleBackup()
         return true
     }
 

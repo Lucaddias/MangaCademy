@@ -34,6 +34,10 @@
 	</dict>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Para salvar páginas e capas na sua galeria de fotos.</string>
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>
