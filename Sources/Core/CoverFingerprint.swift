@@ -43,6 +43,8 @@ public final class ImageDiskStore: @unchecked Sendable {
     public func fetch(urlString: String, referer: String?) async -> Data? {
         if let cached = data(for: urlString) { return cached }
         guard let url = URL(string: urlString) else { return nil }
+        // Páginas baixadas e da Fonte Local já estão no aparelho.
+        if url.isFileURL { return try? Data(contentsOf: url) }
         var req = URLRequest(url: url, timeoutInterval: 20)
         // Servidores MangaDex@Home recusam User-Agent de navegador falsificado (respondem 404)
         let isMangaDexHome = url.host?.hasSuffix("mangadex.network") == true

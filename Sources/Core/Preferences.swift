@@ -16,6 +16,8 @@ public enum Preferences {
         public static let readerVolumeButtons = "reader_volume_buttons"
         /// Inverte os botões de volume (Volume + avança).
         public static let readerInvertVolumeButtons = "reader_volume_buttons_inverted"
+        /// Modo anônimo: não grava histórico nem progresso.
+        public static let incognito = "incognito_mode"
     }
 
     public enum Default {
@@ -25,6 +27,7 @@ public enum Preferences {
         public static let defaultReaderWebtoon = true
         public static let readerVolumeButtons = true
         public static let readerInvertVolumeButtons = false
+        public static let incognito = false
     }
 
     public static var languageFilter: LanguageFilter {
@@ -41,6 +44,10 @@ public enum Preferences {
 
     public static var defaultReaderWebtoon: Bool {
         bool(Key.defaultReaderWebtoon, default: Default.defaultReaderWebtoon)
+    }
+
+    public static var incognito: Bool {
+        bool(Key.incognito, default: Default.incognito)
     }
 
     private static func bool(_ key: String, default value: Bool) -> Bool {
