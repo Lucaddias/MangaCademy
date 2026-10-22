@@ -355,6 +355,23 @@ public struct MangaDetailView: View {
                 }
                 .accessibilityLabel("Marcar como lidos")
                 Spacer()
+                Button {
+                    let chosen = model.chapters.filter { selected.contains($0.id) }
+                    DownloadManager.shared.enqueue(chosen, mangaId: progressId, mangaTitle: model.displayTitle)
+                    selected = []
+                } label: {
+                    Image(systemName: "arrow.down.circle")
+                }
+                .accessibilityLabel("Baixar")
+                Spacer()
+                Button {
+                    DownloadManager.shared.delete(model.chapters.filter { selected.contains($0.id) }, mangaId: progressId)
+                    selected = []
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .accessibilityLabel("Apagar downloads")
+                Spacer()
                 Button { applyToSelection { ChapterStore.setRead(false, chapter: $0, mangaId: progressId, context: modelContext) } } label: {
                     Image(systemName: "circle")
                 }
@@ -376,6 +393,20 @@ public struct MangaDetailView: View {
                 .accessibilityLabel("Marcar anteriores como lidos")
             }
         } else {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button("Próximo capítulo") { download(.next(1)) }
+                    Button("Próximos 5") { download(.next(5)) }
+                    Button("Próximos 10") { download(.next(10)) }
+                    Button("Não lidos") { download(.unread) }
+                    Button("Marcados") { download(.bookmarked) }
+                    Button("Todos") { download(.all) }
+                } label: {
+                    Image(systemName: "arrow.down.circle")
+                }
+                .accessibilityLabel("Baixar capítulos")
+                .disabled(model.chapters.isEmpty)
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     if let url = webURL {
@@ -772,6 +803,7 @@ public struct MangaDetailView: View {
                         ChapterStore.setBookmarked(!isBookmarked, chapter: ch, mangaId: progressId, context: modelContext)
                     }
                 )
+                .download(DownloadManager.shared.state(of: ch, mangaId: progressId)) { toggleDownload(ch) }
             }
         }
         .buttonStyle(.plain)
@@ -787,7 +819,50 @@ public struct MangaDetailView: View {
             Button { ChapterStore.setBookmarked(!isBookmarked, chapter: ch, mangaId: progressId, context: modelContext) } label: {
                 Label(isBookmarked ? "Tirar marcador" : "Marcar", systemImage: isBookmarked ? "bookmark.slash" : "bookmark")
             }
+            downloadMenuButton(ch)
         }
+    }
+
+    @ViewBuilder
+    private func downloadMenuButton(_ ch: SourceChapterItem) -> some View {
+        switch DownloadManager.shared.state(of: ch, mangaId: progressId) {
+        case .downloaded:
+            Button(role: .destructive) { toggleDownload(ch) } label: { Label("Apagar download", systemImage: "trash") }
+        case .queued, .downloading:
+            Button { toggleDownload(ch) } label: { Label("Cancelar download", systemImage: "xmark.circle") }
+        case .none, .failed:
+            Button { toggleDownload(ch) } label: { Label("Baixar", systemImage: "arrow.down.circle") }
+        }
+    }
+
+    /// Baixa, cancela, tenta de novo ou apaga, conforme o estado.
+    private func toggleDownload(_ ch: SourceChapterItem) {
+        let manager = DownloadManager.shared
+        switch manager.state(of: ch, mangaId: progressId) {
+        case .none:
+            manager.enqueue([ch], mangaId: progressId, mangaTitle: model.displayTitle)
+        case .failed:
+            manager.delete([ch], mangaId: progressId)
+            manager.enqueue([ch], mangaId: progressId, mangaTitle: model.displayTitle)
+        case .queued, .downloading, .downloaded:
+            manager.delete([ch], mangaId: progressId)
+        }
+    }
+
+    private enum DownloadChoice { case next(Int), unread, all, bookmarked }
+
+    private func download(_ choice: DownloadChoice) {
+        let progress = progress
+        // A lista vai do mais novo para o mais antigo; "próximos" segue a ordem de leitura.
+        let oldestFirst = Array(model.chapters.reversed())
+        let chapters: [SourceChapterItem]
+        switch choice {
+        case .next(let count): chapters = Array(oldestFirst.filter { !progress.isRead($0) }.prefix(count))
+        case .unread: chapters = oldestFirst.filter { !progress.isRead($0) }
+        case .all: chapters = oldestFirst
+        case .bookmarked: chapters = oldestFirst.filter { progress.isBookmarked($0) }
+        }
+        DownloadManager.shared.enqueue(chapters, mangaId: progressId, mangaTitle: model.displayTitle)
     }
 
     @ViewBuilder
@@ -808,7 +883,13 @@ public struct MangaDetailView: View {
                 Label("Anteriores", systemImage: "text.badge.checkmark")
             }
             .tint(.indigo)
-        case .download, .disabled:
+        case .download:
+            let downloaded = DownloadManager.shared.state(of: ch, mangaId: progressId) != .none
+            Button { toggleDownload(ch) } label: {
+                Label(downloaded ? "Apagar" : "Baixar", systemImage: downloaded ? "trash" : "arrow.down.circle")
+            }
+            .tint(downloaded ? .red : .green)
+        case .disabled:
             EmptyView()
         }
     }

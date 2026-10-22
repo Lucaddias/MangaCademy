@@ -154,6 +154,9 @@ final class LibraryUpdater {
         }
 
         try? context.save()
+        for manga in list {
+            if let new = newChapters[manga.id] { AutoDownloader.downloadNewChapters(new, manga: manga) }
+        }
         lastRun = now
         defaults.set(now, forKey: "library_update_last_run")
         defaults.set(try? JSONEncoder().encode(errors), forKey: "library_update_errors")

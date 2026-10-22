@@ -80,7 +80,7 @@ struct UpdatesView: View {
         _ = downloadVersion
         return UpdatesFeed.items(records: records, favorites: favorites).filter { item in
             if onlyUnread && item.isRead { return false }
-            if onlyDownloaded && !DownloadStore.shared.isDownloaded(item.chapter, mangaId: item.manga.id) { return false }
+            if (onlyDownloaded || DownloadSettings.shared.downloadedOnly) && !DownloadStore.shared.isDownloaded(item.chapter, mangaId: item.manga.id) { return false }
             if let categoryFilter {
                 let known = Set(categories.map(\.id))
                 let mine = Set(item.manga.categoryIds).intersection(known)

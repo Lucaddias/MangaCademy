@@ -57,7 +57,13 @@ public struct RootView: View {
                 .tag(AppNavigation.Tab.settings)
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { BackgroundTasks.catchUpIfNeeded(context: modelContext) }
+            if phase == .active {
+                BackgroundTasks.catchUpIfNeeded(context: modelContext)
+                DownloadManager.shared.pump()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NetworkMonitor.changed).receive(on: RunLoop.main)) { _ in
+            DownloadManager.shared.pump()
         }
         .alert("Dados recriados", isPresented: $showStoreResetAlert) {
             Button("OK", role: .cancel) {}

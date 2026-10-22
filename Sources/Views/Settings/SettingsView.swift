@@ -6,6 +6,7 @@ public struct SettingsView: View {
     @State private var repository = KeiyoushiRepository.shared
     @State private var readerSettings = ReaderSettings.shared
     @State private var librarySettings = LibrarySettings.shared
+    @State private var downloads = DownloadManager.shared
     @Query(sort: \MangaCategory.order) private var categories: [MangaCategory]
     @AppStorage("chapter_swipe_start") private var swipeStart = ChapterSwipeAction.toggleBookmark.rawValue
     @AppStorage("chapter_swipe_end") private var swipeEnd = ChapterSwipeAction.toggleRead.rawValue
@@ -104,6 +105,15 @@ public struct SettingsView: View {
                     if volumeButtons {
                         Text(ReaderPreferences.volumeButtonsFooter(inverted: invertVolumeButtons))
                     }
+                }
+
+                Section("Downloads") {
+                    NavigationLink {
+                        DownloadQueueView()
+                    } label: {
+                        LabeledContent("Fila de downloads", value: downloads.queue.isEmpty ? "" : "\(downloads.queue.count)")
+                    }
+                    NavigationLink("Ajustes de download") { DownloadSettingsView() }
                 }
 
                 Section("Dados") {

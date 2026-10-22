@@ -95,7 +95,7 @@ public struct LibraryView: View {
         filters.started = settings.filterStarted
         filters.completed = settings.filterCompleted
         filters.bookmarked = settings.filterBookmarked
-        filters.downloaded = settings.filterDownloaded
+        filters.downloaded = DownloadSettings.shared.downloadedOnly ? .include : settings.filterDownloaded
         filters.tracked = settings.filterTracked
         return LibraryQuery.apply(entries, filters: filters, search: searchText, sort: settings.sort, ascending: settings.ascending, seed: settings.randomSeed)
             .compactMap { byId[$0.id] }
@@ -289,6 +289,9 @@ public struct LibraryView: View {
                 Button { categoryTargets = selectedMangas } label: { Image(systemName: "folder") }
                     .accessibilityLabel("Mudar categoria")
                 Spacer()
+                Button { downloadSelected() } label: { Image(systemName: "arrow.down.circle") }
+                    .accessibilityLabel("Baixar não lidos")
+                Spacer()
                 Button(role: .destructive) { confirmRemove = true } label: { Image(systemName: "trash") }
                     .accessibilityLabel("Remover da biblioteca")
             }
@@ -366,6 +369,16 @@ public struct LibraryView: View {
         readingTarget = LibraryReadingTarget(mangaId: manga.id, title: manga.title, coverUrl: work.coverUrl, chapters: list, index: index)
     }
 
+    /// Põe na fila os capítulos não lidos das obras selecionadas.
+    private func downloadSelected() {
+        for manga in selectedMangas {
+            let list = ChapterStore.savedChapterList(for: manga, context: modelContext)
+            let progress = ChapterProgress(records: ChapterStore.records(mangaId: manga.id, context: modelContext), mangaId: manga.id)
+            DownloadManager.shared.enqueue(list.filter { !progress.isRead($0) }, mangaId: manga.id, mangaTitle: manga.title)
+        }
+        endSelection()
+    }
+
     private func refreshDownloadCounts() {
         var counts: [String: Int] = [:]
         for manga in favoriteMangas {
@@ -382,6 +395,11 @@ enum LibraryActions {
     static func removeFromLibrary(_ manga: Manga, context: ModelContext) {
         manga.isFavorite = false
         manga.favoriteAt = nil
+        if DownloadSettings.shared.deleteOnRemoveFromLibrary {
+            DownloadManager.shared.cancel(mangaId: manga.id)
+            DownloadStore.shared.deleteManga(mangaId: manga.id)
+            NotificationCenter.default.post(name: .downloadsChanged, object: nil)
+        }
     }
 
     /// Categorias de uma obra recém-adicionada, segundo o ajuste "categoria padrão".
