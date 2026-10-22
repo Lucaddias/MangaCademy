@@ -3,7 +3,7 @@ import SwiftUI
 public struct SettingsView: View {
     @State private var cacheCleared = false
     @State private var repository = KeiyoushiRepository.shared
-    @AppStorage(Preferences.Key.defaultReaderWebtoon) private var defaultReaderWebtoon = Preferences.Default.defaultReaderWebtoon
+    @State private var readerSettings = ReaderSettings.shared
     @AppStorage(Preferences.Key.showNsfwSources) private var showNsfw = Preferences.Default.showNsfwSources
     @AppStorage(Preferences.Key.blockAdultTags) private var blockAdult = Preferences.Default.blockAdultTags
     @AppStorage(Preferences.Key.readerVolumeButtons) private var volumeButtons = Preferences.Default.readerVolumeButtons
@@ -71,7 +71,9 @@ public struct SettingsView: View {
                 }
 
                 Section {
-                    Toggle("Modo Webtoon por padrão", isOn: $defaultReaderWebtoon)
+                    Picker("Modo de leitura padrão", selection: $readerSettings.defaultMode) {
+                        ForEach(ReadingMode.allCases) { Text($0.title).tag($0) }
+                    }
                     Toggle("Virar página com o volume", isOn: $volumeButtons)
                     Toggle("Inverter botões de volume", isOn: $invertVolumeButtons)
                         .disabled(!volumeButtons)

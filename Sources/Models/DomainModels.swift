@@ -2,18 +2,20 @@ import Foundation
 import SwiftData
 
 // O resto do app usa os nomes curtos, sempre apontando para a versão atual do banco.
-public typealias Manga = SchemaV2.Manga
-public typealias Chapter = SchemaV2.Chapter
-public typealias HistoryEntry = SchemaV2.HistoryEntry
+public typealias Manga = SchemaV3.Manga
+public typealias Chapter = SchemaV3.Chapter
+public typealias HistoryEntry = SchemaV3.HistoryEntry
+public typealias MangaCategory = SchemaV3.MangaCategory
+public typealias TrackRecord = SchemaV3.TrackRecord
 
-/// Versão atual do banco. Para mudar um modelo: copie este arquivo para `Schema/SchemaV2.swift`
-/// (congelado), crie `SchemaV3` aqui com a mudança, aponte os typealiases para ele e
+/// Versão atual do banco. Para mudar um modelo: copie este arquivo para `Schema/SchemaV3.swift`
+/// (congelado), crie `SchemaV4` aqui com a mudança, aponte os typealiases para ele e
 /// acrescente a etapa em `AppMigrationPlan`. Propriedades novas sempre com valor padrão.
-public enum SchemaV2: VersionedSchema {
-    public static let versionIdentifier = Schema.Version(2, 0, 0)
+public enum SchemaV3: VersionedSchema {
+    public static let versionIdentifier = Schema.Version(3, 0, 0)
 
     public static var models: [any PersistentModel.Type] {
-        [Manga.self, Chapter.self, HistoryEntry.self]
+        [Manga.self, Chapter.self, HistoryEntry.self, MangaCategory.self, TrackRecord.self]
     }
 
     @Model
@@ -36,6 +38,30 @@ public enum SchemaV2: VersionedSchema {
         public var sourcesJSON: String?
         /// Último idioma de capítulos escolhido pelo usuário para esta obra.
         public var preferredLanguage: String?
+
+        /// Categorias da biblioteca (`MangaCategory.id`). Vazio = categoria padrão.
+        public var categoryIds: [String] = []
+        /// Modo de leitura desta obra (`ReadingMode.rawValue`); nil = padrão global.
+        public var readingMode: Int? = nil
+        /// Orientação travada no leitor (`ReaderOrientation.rawValue`); nil = padrão global.
+        public var orientation: Int? = nil
+        /// Filtros, ordem e exibição da lista de capítulos (`ChapterListFlags`).
+        public var chapterFlags: Int = 0
+        /// Scanlators e fontes escondidos nesta obra.
+        public var excludedScanlators: [String] = []
+        /// Fonte preferida quando o mesmo capítulo existe em várias fontes.
+        public var preferredSourceId: String? = nil
+        /// Anotações do usuário (Markdown).
+        public var notes: String = ""
+        /// Capa escolhida pelo usuário (nome do arquivo em Application Support/Covers).
+        public var customCoverPath: String? = nil
+        public var lastReadAt: Date? = nil
+        /// Data de upload do capítulo mais novo.
+        public var latestUploadAt: Date? = nil
+        /// Capítulos (sem repetição) no idioma da obra.
+        public var chapterCount: Int = 0
+        /// Previsão do próximo capítulo (intervalo mediano entre lançamentos).
+        public var nextUpdateAt: Date? = nil
 
         @Relationship(deleteRule: .cascade, inverse: \Chapter.manga)
         public var chapters: [Chapter] = []
@@ -149,6 +175,8 @@ public enum SchemaV2: VersionedSchema {
         public var sourceId: String? = nil
         public var chapterRemoteUrl: String? = nil
         public var mangaRemoteUrl: String? = nil
+        /// Tempo de leitura acumulado neste capítulo, em segundos.
+        public var timeRead: Double = 0
 
         public init(
             mangaId: String,
@@ -175,6 +203,53 @@ public enum SchemaV2: VersionedSchema {
             self.sourceId = sourceId
             self.chapterRemoteUrl = chapterRemoteUrl
             self.mangaRemoteUrl = mangaRemoteUrl
+        }
+    }
+
+    /// Categoria da biblioteca (aba).
+    @Model
+    public final class MangaCategory {
+        @Attribute(.unique) public var id: String
+        public var name: String
+        public var order: Int
+        /// Reservado para filtros/ordem por categoria.
+        public var flags: Int = 0
+
+        public init(id: String = UUID().uuidString, name: String, order: Int) {
+            self.id = id
+            self.name = name
+            self.order = order
+        }
+    }
+
+    /// Vínculo de uma obra com um serviço de rastreamento (AniList, MyAnimeList...).
+    @Model
+    public final class TrackRecord {
+        @Attribute(.unique) public var id: String // "\(mangaId)|\(trackerId)"
+        public var mangaId: String
+        public var trackerId: String
+        public var remoteId: String
+        public var title: String
+        /// `TrackStatus.rawValue`.
+        public var status: Int
+        public var score: Double
+        public var lastChapterRead: Double
+        public var totalChapters: Int
+        public var startDate: Date?
+        public var finishDate: Date?
+        public var remoteUrl: String?
+        public var isPrivate: Bool = false
+
+        public init(mangaId: String, trackerId: String, remoteId: String, title: String) {
+            self.id = "\(mangaId)|\(trackerId)"
+            self.mangaId = mangaId
+            self.trackerId = trackerId
+            self.remoteId = remoteId
+            self.title = title
+            self.status = 1
+            self.score = 0
+            self.lastChapterRead = 0
+            self.totalChapters = 0
         }
     }
 }

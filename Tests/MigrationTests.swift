@@ -45,6 +45,33 @@ struct MigrationTests {
         #expect(history.first?.sourceId == nil)
     }
 
+    /// Bancos V2 ganham os campos novos da V3 com valores padrão, sem perder o progresso.
+    @Test func v2StoreMigratesToV3WithDefaults() throws {
+        let url = temporaryStoreURL()
+        do {
+            let schema = Schema(versionedSchema: SchemaV2.self)
+            let container = try ModelContainer(for: schema, configurations: ModelConfiguration(schema: schema, url: url))
+            let context = ModelContext(container)
+            let manga = SchemaV2.Manga(sourceId: "ky-1", remoteUrl: "/obra", title: "Obra", isFavorite: true)
+            context.insert(manga)
+            let chapter = SchemaV2.Chapter(mangaId: manga.id, remoteUrl: "/cap-1", name: "Cap. 1", chapterNumber: 1, orderIndex: 0, sourceId: "ky-1")
+            chapter.lastPageRead = 7
+            chapter.manga = manga
+            context.insert(chapter)
+            try context.save()
+        }
+
+        let context = ModelContext(try ModelStore.open(url: url))
+        let manga = try #require(try context.fetch(FetchDescriptor<Manga>()).first)
+        #expect(manga.categoryIds.isEmpty)
+        #expect(manga.readingMode == nil)
+        #expect(manga.notes.isEmpty)
+        #expect(try context.fetch(FetchDescriptor<Chapter>()).first?.lastPageRead == 7)
+        context.insert(MangaCategory(name: "Lendo", order: 0))
+        try context.save()
+        #expect(try context.fetchCount(FetchDescriptor<MangaCategory>()) == 1)
+    }
+
     @Test func unreadableStoreIsMovedAsideAndRecreated() throws {
         let url = temporaryStoreURL()
         try Data("não é um banco sqlite".utf8).write(to: url)

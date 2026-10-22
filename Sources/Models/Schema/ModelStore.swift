@@ -4,20 +4,23 @@ import SwiftData
 /// Etapas de migração entre as versões do banco, em ordem.
 public enum AppMigrationPlan: SchemaMigrationPlan {
     public static var schemas: [any VersionedSchema.Type] {
-        [SchemaV1.self, SchemaV2.self]
+        [SchemaV1.self, SchemaV2.self, SchemaV3.self]
     }
 
     public static var stages: [MigrationStage] {
-        [v1ToV2]
+        [v1ToV2, v2ToV3]
     }
 
     /// V2: lista de capítulos salva (`dateFetch`, `mangaRemoteUrl`) e histórico que reabre o capítulo.
     static let v1ToV2 = MigrationStage.lightweight(fromVersion: SchemaV1.self, toVersion: SchemaV2.self)
+
+    /// V3: categorias, rastreamento, ajustes por obra (leitor, capítulos, scanlators) e tempo de leitura.
+    static let v2ToV3 = MigrationStage.lightweight(fromVersion: SchemaV2.self, toVersion: SchemaV3.self)
 }
 
 /// Abre o banco do app.
 public enum ModelStore {
-    public static var schema: Schema { Schema(versionedSchema: SchemaV2.self) }
+    public static var schema: Schema { Schema(versionedSchema: SchemaV3.self) }
 
     /// Abre (e migra, se preciso) o banco em `url`, ou no local padrão quando `url` é nil.
     public static func open(url: URL? = nil) throws -> ModelContainer {
