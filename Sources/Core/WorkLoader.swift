@@ -117,12 +117,15 @@ public final class WorkLoader {
     public var onUpdate: ((WorkLoader) -> Void)?
 
     private let filter: LanguageFilter
+    /// Procura a obra também no MangaDex e no ComicK (desligado na atualização da biblioteca).
+    private let lookupOtherLanguages: Bool
     private var loadedRefIds = Set<String>()
     private static let maxConcurrentSources = 6
 
-    public init(work: UnifiedWork, filter: LanguageFilter) {
+    public init(work: UnifiedWork, filter: LanguageFilter, lookupOtherLanguages: Bool = true) {
         self.state = WorkLoadState(work: work)
         self.filter = filter
+        self.lookupOtherLanguages = lookupOtherLanguages
     }
 
     /// Consulta todas as fontes da obra (as do idioma do filtro primeiro, no máximo 6 ao mesmo
@@ -135,8 +138,10 @@ public final class WorkLoader {
         }
         await withTaskGroup(of: Void.self) { group in
             var pending = refs.makeIterator()
-            group.addTask { await self.lookupMultiLanguage(sourceId: "mangadex") }
-            group.addTask { await self.lookupMultiLanguage(sourceId: "comick") }
+            if lookupOtherLanguages {
+                group.addTask { await self.lookupMultiLanguage(sourceId: "mangadex") }
+                group.addTask { await self.lookupMultiLanguage(sourceId: "comick") }
+            }
             for _ in 0..<Self.maxConcurrentSources {
                 guard let ref = pending.next() else { break }
                 group.addTask { await self.loadRef(ref) }

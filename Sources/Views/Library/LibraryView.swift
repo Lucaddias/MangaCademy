@@ -23,6 +23,7 @@ public struct LibraryView: View {
 
     @AppStorage(Preferences.Key.languageFilter) private var filterRaw: String = Preferences.Default.languageFilter.rawValue
     @State private var settings = LibrarySettings.shared
+    @State private var updater = LibraryUpdater.shared
     @State private var searchText = ""
     @State private var path: [UnifiedWork] = []
     @State private var downloadCounts: [String: Int] = [:]
@@ -111,6 +112,16 @@ public struct LibraryView: View {
             VStack(spacing: 0) {
                 if settings.showCategoryTabs && tabs.count > 1 && !favoriteMangas.isEmpty {
                     categoryBar
+                }
+                if updater.isRunning {
+                    VStack(spacing: 4) {
+                        ProgressView(value: Double(updater.progress), total: Double(max(updater.total, 1)))
+                        Text("Atualizando \(updater.progress) de \(updater.total)…")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, 4)
                 }
                 content
             }
@@ -201,6 +212,10 @@ public struct LibraryView: View {
                         }
                         .padding()
                     }
+                }
+                .refreshable {
+                    // Puxar para atualizar atualiza a aba aberta.
+                    await updater.update(categoryId: settings.showCategoryTabs && !categories.isEmpty ? activeTab : nil, context: modelContext)
                 }
             }
         }
@@ -295,6 +310,11 @@ public struct LibraryView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
+                    Button {
+                        Task { await updater.update(categoryId: nil, context: modelContext) }
+                    } label: {
+                        Label("Atualizar biblioteca", systemImage: "arrow.clockwise")
+                    }
                     NavigationLink {
                         CategoryManagerView()
                     } label: {

@@ -69,6 +69,7 @@ public struct SettingsView: View {
 
                 Section("Biblioteca") {
                     NavigationLink("Categorias (\(categories.count))") { CategoryManagerView() }
+                    NavigationLink("Atualizações") { UpdateSettingsView() }
                     Picker("Categoria ao adicionar", selection: $librarySettings.defaultCategory) {
                         Text("Padrão").tag("")
                         Text("Perguntar sempre").tag("ask")
