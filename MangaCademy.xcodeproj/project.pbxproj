@@ -41,6 +41,7 @@
 		7B39A643656D48A7B0609F16 /* Sources/App/RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FBED40AFF41486097106E37 /* Sources/App/RootView.swift */; };
 		7DA80FDC17C5499EAF8F523C /* Sources/Views/Detail/MangaDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0617ADD6B6B84B3E8C085BF9 /* Sources/Views/Detail/MangaDetailView.swift */; };
 		82A5A999948743D2A407927D /* Sources/Views/Reader/WebtoonPageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D15CFF47C23C4B1188C8511F /* Sources/Views/Reader/WebtoonPageView.swift */; };
+		B8D4FA206C3E4F9BA07C2D41 /* Sources/Views/Reader/VolumeButtonCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7C3E91F5B2D4E8A9F6B1C30 /* Sources/Views/Reader/VolumeButtonCapture.swift */; };
 		88E493B89D614E6DBE14F3C4 /* Sources/Core/MangaSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73FAB6E060A74614B8A64E83 /* Sources/Core/MangaSource.swift */; };
 		9F065FE25CB84362AB8A5217 /* Sources/Views/Detail/ChapterRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3C2801FEBDA4AC480692EAB /* Sources/Views/Detail/ChapterRowView.swift */; };
 		A8F1A4F983A14C04842E8A7F /* Sources/Views/Settings/SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B43D40D72BD40D9BC465EF6 /* Sources/Views/Settings/SettingsView.swift */; };
@@ -95,6 +96,7 @@
 		AFF68785E7B44798A5DB08A1 /* Sources/Views/Reader/ReaderFloatingBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Views/Reader/ReaderFloatingBar.swift; sourceTree = "<group>"; };
 		C40BE49DB58A4F17B3A7B18E /* Sources/Views/Library/MangaGridItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Views/Library/MangaGridItem.swift; sourceTree = "<group>"; };
 		D15CFF47C23C4B1188C8511F /* Sources/Views/Reader/WebtoonPageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Views/Reader/WebtoonPageView.swift; sourceTree = "<group>"; };
+		A7C3E91F5B2D4E8A9F6B1C30 /* Sources/Views/Reader/VolumeButtonCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Views/Reader/VolumeButtonCapture.swift; sourceTree = "<group>"; };
 		D3C2801FEBDA4AC480692EAB /* Sources/Views/Detail/ChapterRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Views/Detail/ChapterRowView.swift; sourceTree = "<group>"; };
 		D4C645C22A4F400392645F37 /* Sources/Views/Browse/ExtensionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Views/Browse/ExtensionsView.swift; sourceTree = "<group>"; };
 		D6F3BF8980064BB0B38F7466 /* Sources/Views/Reader/ReaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Views/Reader/ReaderView.swift; sourceTree = "<group>"; };
@@ -157,6 +159,7 @@
 				AFF68785E7B44798A5DB08A1 /* Sources/Views/Reader/ReaderFloatingBar.swift */,
 				D6F3BF8980064BB0B38F7466 /* Sources/Views/Reader/ReaderView.swift */,
 				D15CFF47C23C4B1188C8511F /* Sources/Views/Reader/WebtoonPageView.swift */,
+				A7C3E91F5B2D4E8A9F6B1C30 /* Sources/Views/Reader/VolumeButtonCapture.swift */,
 				2B43D40D72BD40D9BC465EF6 /* Sources/Views/Settings/SettingsView.swift */,
 				DFC194311FB24D40A0FE5F86 /* Sources/Views/Library/LibraryView.swift */,
 				C40BE49DB58A4F17B3A7B18E /* Sources/Views/Library/MangaGridItem.swift */,
@@ -292,6 +295,7 @@
 				2D0E118F7CD94351B90234F3 /* Sources/Views/Reader/ReaderFloatingBar.swift in Sources */,
 				CC732575A6E24833A3C951E9 /* Sources/Views/Reader/ReaderView.swift in Sources */,
 				82A5A999948743D2A407927D /* Sources/Views/Reader/WebtoonPageView.swift in Sources */,
+				B8D4FA206C3E4F9BA07C2D41 /* Sources/Views/Reader/VolumeButtonCapture.swift in Sources */,
 				A8F1A4F983A14C04842E8A7F /* Sources/Views/Settings/SettingsView.swift in Sources */,
 				45E26CD4BC834B0E88CF357F /* Sources/Views/Library/LibraryView.swift in Sources */,
 				225F4663431D488C90C39276 /* Sources/Views/Library/MangaGridItem.swift in Sources */,
