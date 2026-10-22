@@ -4,6 +4,7 @@ import SwiftData
 public struct ReaderView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
     
     /// Id da obra unificada (biblioteca/progresso). Cada capítulo sabe sua fonte de origem.
     let mangaId: String
@@ -16,12 +17,17 @@ public struct ReaderView: View {
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var showControls = true
-    @State private var isWebtoonMode = UserDefaults.standard.object(forKey: "default_reader_webtoon") as? Bool ?? true
+    @State private var isWebtoonMode = Preferences.defaultReaderWebtoon
+    /// Página atual, contando de 1.
     @State private var currentPage = 1
+    /// Página do topo da tela no modo Webtoon (também usada para posicionar a rolagem).
+    @State private var webtoonPosition: Int?
+    /// Capítulo cujas páginas estão na tela (o progresso é salvo nele).
+    @State private var displayedChapter: SourceChapterItem?
     
     // Botões de volume
-    @AppStorage(ReaderPreferences.volumeButtonsKey) private var volumeButtonsEnabled = true
-    @AppStorage(ReaderPreferences.invertVolumeButtonsKey) private var invertVolumeButtons = false
+    @AppStorage(Preferences.Key.readerVolumeButtons) private var volumeButtonsEnabled = Preferences.Default.readerVolumeButtons
+    @AppStorage(Preferences.Key.readerInvertVolumeButtons) private var invertVolumeButtons = Preferences.Default.readerInvertVolumeButtons
     @State private var webtoonScroller = ReaderScroller()
     @State private var pagedScroller = ReaderScroller()
     @State private var edgeHint: ReaderEdgeHint?
@@ -96,16 +102,18 @@ public struct ReaderView: View {
                         if isWebtoonMode {
                             ScrollView {
                                 LazyVStack(spacing: 0) {
-                                    Color.clear
-                                        .frame(height: 1)
-                                        .background(ScrollViewProbe(scroller: webtoonScroller))
-                                        .id("page_top")
-                                    
                                     ForEach(pages) { page in
                                         WebtoonPageView(page: page)
                                     }
+                                    // Criado só perto do fim da rolagem: chegou na última página.
+                                    Color.clear
+                                        .frame(height: 1)
+                                        .onAppear { currentPage = pages.count }
                                 }
+                                .scrollTargetLayout()
+                                .background(ScrollViewProbe(scroller: webtoonScroller))
                             }
+                            .scrollPosition(id: $webtoonPosition)
                         } else {
                             TabView(selection: $currentPage) {
                                 ForEach(pages) { page in
@@ -193,7 +201,11 @@ public struct ReaderView: View {
                             },
                             onScrollToTop: {
                                 withAnimation(.easeInOut(duration: 0.4)) {
-                                    scrollProxy.scrollTo("page_top", anchor: .top)
+                                    if isWebtoonMode, let first = pages.first {
+                                        scrollProxy.scrollTo(first.id, anchor: .top)
+                                    } else {
+                                        currentPage = pages.first?.pageNumber ?? 1
+                                    }
                                 }
                                 withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                                     showControls = false
@@ -222,6 +234,24 @@ public struct ReaderView: View {
             }
             .task(id: currentChapterIndex) {
                 await loadPages()
+            }
+            .onChange(of: webtoonPosition) { _, page in
+                if let page { currentPage = page }
+            }
+            .onChange(of: currentPage) { _, _ in
+                markReadIfFinished()
+            }
+            // Salva a página um instante depois de parar nela (e não a cada página que passa).
+            .task(id: currentPage) {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { return }
+                saveProgress()
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase != .active { saveProgress() }
+            }
+            .onDisappear {
+                saveProgress()
             }
             .task(id: edgeHint) {
                 guard let hint = edgeHint else { return }
@@ -356,7 +386,8 @@ public struct ReaderView: View {
     }
     
     private func reloadCurrentChapter() async {
-        ImageCache.shared.clearCache()
+        // Só as páginas deste capítulo: capas e outros capítulos continuam no cache.
+        ImageCache.shared.remove(urlStrings: pages.map(\.imageUrl))
         await loadPages()
         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
             showControls = false
@@ -364,6 +395,8 @@ public struct ReaderView: View {
     }
     
     private func loadPages() async {
+        // Ao trocar de capítulo, guarda onde o anterior parou.
+        saveProgress()
         guard let ch = currentChapter,
               let source = SourceManager.shared.getSource(id: ch.sourceId) else {
             errorMessage = "Capítulo ou fonte indisponível"
@@ -374,7 +407,7 @@ public struct ReaderView: View {
         isLoading = true
         errorMessage = nil
         edgeHint = nil
-        currentPage = 1
+        displayedChapter = nil
         
         do {
             let loadedPages = try await source.fetchPages(
@@ -386,28 +419,56 @@ public struct ReaderView: View {
                 isLoading = false
                 return
             }
+            // Retoma onde parou; capítulo já lido recomeça do início.
+            let saved = ChapterStore.record(for: ch, mangaId: mangaId, context: modelContext)
+            let resumePage = saved.map { $0.isRead ? 1 : min(max($0.lastPageRead, 1), loadedPages.count) } ?? 1
             pages = loadedPages
+            currentPage = resumePage
+            webtoonPosition = resumePage
+            displayedChapter = ch
             isLoading = false
             
-            // Progresso: marca o capítulo como lido e registra no histórico
-            ReadTracker.setRead(true, chapter: ch, mangaId: mangaId, context: modelContext)
-            let history = HistoryEntry(
-                mangaId: mangaId,
-                chapterId: Chapter.storageId(mangaId: mangaId, sourceId: ch.sourceId, remoteUrl: ch.remoteUrl),
-                mangaTitle: mangaTitle,
-                chapterName: ch.name,
-                coverUrl: coverUrl,
-                readAt: Date(),
-                pageNumber: 1,
-                totalPages: loadedPages.count
-            )
-            modelContext.insert(history)
-            try? modelContext.save()
-            
+            saveProgress()
+            markReadIfFinished()
         } catch {
             errorMessage = "Falha ao carregar páginas (\(source.name)): \(error.localizedDescription)"
             isLoading = false
         }
+    }
+    
+    /// Grava a página atual no capítulo e no histórico.
+    private func saveProgress() {
+        guard let ch = displayedChapter, !pages.isEmpty else { return }
+        let page = min(max(currentPage, 1), pages.count)
+        ChapterStore.saveProgress(page: page, totalPages: pages.count, chapter: ch, mangaId: mangaId, context: modelContext)
+        
+        let chapterId = Chapter.storageId(mangaId: mangaId, sourceId: ch.sourceId, remoteUrl: ch.remoteUrl)
+        var descriptor = FetchDescriptor<HistoryEntry>(predicate: #Predicate { $0.id == chapterId })
+        descriptor.fetchLimit = 1
+        let entry: HistoryEntry
+        if let existing = try? modelContext.fetch(descriptor).first {
+            entry = existing
+        } else {
+            entry = HistoryEntry(mangaId: mangaId, chapterId: chapterId, mangaTitle: mangaTitle, chapterName: ch.name, coverUrl: coverUrl)
+            modelContext.insert(entry)
+        }
+        entry.mangaTitle = mangaTitle
+        entry.chapterName = ch.name
+        entry.coverUrl = coverUrl ?? entry.coverUrl
+        entry.readAt = Date()
+        entry.pageNumber = page
+        entry.totalPages = pages.count
+        entry.sourceId = ch.sourceId
+        entry.chapterRemoteUrl = ch.remoteUrl
+        entry.mangaRemoteUrl = ch.mangaRemoteUrl
+        try? modelContext.save()
+    }
+    
+    /// O capítulo conta como lido ao chegar na última página.
+    private func markReadIfFinished() {
+        guard let ch = displayedChapter, !pages.isEmpty, currentPage >= pages.count else { return }
+        guard ChapterStore.record(for: ch, mangaId: mangaId, context: modelContext)?.isRead != true else { return }
+        ChapterStore.setRead(true, chapter: ch, mangaId: mangaId, context: modelContext)
     }
 }
 
@@ -466,9 +527,6 @@ private struct ChapterDrawerSheet: View {
 
 // MARK: - Reader Preferences
 enum ReaderPreferences {
-    static let volumeButtonsKey = "reader_volume_buttons"
-    static let invertVolumeButtonsKey = "reader_volume_buttons_inverted"
-    
     static func volumeButtonsFooter(inverted: Bool) -> String {
         let (forward, back) = inverted ? ("Volume +", "Volume −") : ("Volume −", "Volume +")
         return "\(forward) avança e \(back) volta. No fim do capítulo, aperte de novo para abrir o próximo. Enquanto ligado, os botões não mudam o volume dentro do leitor."
@@ -480,8 +538,8 @@ private struct ReaderSettingsSheet: View {
     @Binding var isWebtoonMode: Bool
     let onClose: () -> Void
     
-    @AppStorage(ReaderPreferences.volumeButtonsKey) private var volumeButtons = true
-    @AppStorage(ReaderPreferences.invertVolumeButtonsKey) private var invertVolumeButtons = false
+    @AppStorage(Preferences.Key.readerVolumeButtons) private var volumeButtons = Preferences.Default.readerVolumeButtons
+    @AppStorage(Preferences.Key.readerInvertVolumeButtons) private var invertVolumeButtons = Preferences.Default.readerInvertVolumeButtons
     
     var body: some View {
         NavigationStack {

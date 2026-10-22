@@ -3,9 +3,9 @@ import SwiftUI
 /// Catálogo unificado de todas as fontes Keiyoushi com motor iOS.
 /// O filtro de idioma substitui o antigo seletor "Fontes / Extensões".
 public struct BrowseView: View {
-    @AppStorage(LanguageFilter.storageKey) private var filterRaw: String = LanguageFilter.portuguese.rawValue
-    @AppStorage("show_nsfw_sources") private var showNsfw = false
-    @AppStorage(ContentFilter.blockAdultKey) private var blockAdult = true
+    @AppStorage(Preferences.Key.languageFilter) private var filterRaw: String = Preferences.Default.languageFilter.rawValue
+    @AppStorage(Preferences.Key.showNsfwSources) private var showNsfw = Preferences.Default.showNsfwSources
+    @AppStorage(Preferences.Key.blockAdultTags) private var blockAdult = Preferences.Default.blockAdultTags
 
     @State private var feed = CatalogFeed()
     @State private var sort: BrowseSort = .popular

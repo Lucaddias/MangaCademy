@@ -1,7 +1,7 @@
 import SwiftUI
 import SwiftData
 
-/// Carrega uma obra unificada em todas as fontes onde ela existe e agrupa os capítulos por idioma.
+/// Estado da tela de detalhe: carrega a obra pelo `WorkLoader` e cuida da escolha do idioma.
 @MainActor
 @Observable
 final class WorkDetailModel {
@@ -16,13 +16,6 @@ final class WorkDetailModel {
     private(set) var isAdult = false
     var selectedLanguage: String?
 
-    private var allChapters: [SourceChapterItem] = []
-    private struct LoadedDetail {
-        let language: String
-        let detail: SourceMangaDetail
-    }
-    private var details: [LoadedDetail] = []
-    private var loadedRefIds = Set<String>()
     private var userPickedLanguage = false
     private var filter: LanguageFilter = .all
     private var savedLanguage: String?
@@ -57,99 +50,25 @@ final class WorkDetailModel {
         self.savedLanguage = savedLanguage
         if let savedLanguage { selectedLanguage = savedLanguage; userPickedLanguage = true }
 
-        // Todas as fontes da obra entram, para unificar todos os capítulos de cada idioma.
-        // As do idioma do filtro vêm primeiro; no máximo 6 requisições simultâneas
-        let refs = work.refs.sorted { a, b in
-            let la = SourceManager.shared.getSource(id: a.sourceId)?.language ?? "all"
-            let lb = SourceManager.shared.getSource(id: b.sourceId)?.language ?? "all"
-            return (filter.matches(la) ? 0 : 1) < (filter.matches(lb) ? 0 : 1)
-        }
-        await withTaskGroup(of: Void.self) { group in
-            var pending = refs.makeIterator()
-            // Procura a mesma obra nas fontes multi-idioma para listar todos os idiomas disponíveis
-            group.addTask { await self.lookupMultiLanguage(sourceId: "mangadex") }
-            group.addTask { await self.lookupMultiLanguage(sourceId: "comick") }
-            for _ in 0..<6 {
-                guard let ref = pending.next() else { break }
-                group.addTask { await self.loadRef(ref) }
-            }
-            while await group.next() != nil {
-                if let ref = pending.next() {
-                    group.addTask { await self.loadRef(ref) }
-                }
-            }
-        }
+        let loader = WorkLoader(work: work, filter: filter)
+        loader.onUpdate = { [weak self] loader in self?.apply(loader) }
+        await loader.load()
     }
 
     func reload() async {
         hasLoaded = false
-        allChapters = []
-        details = []
-        loadedRefIds = []
         failures = []
         chaptersByLanguage = [:]
         languages = []
         await load(filter: filter, savedLanguage: userPickedLanguage ? selectedLanguage : savedLanguage)
     }
 
-    private func loadRef(_ ref: WorkSourceRef) async {
-        guard loadedRefIds.insert(ref.id).inserted else { return }
-        guard let source = SourceManager.shared.getSource(id: ref.sourceId) else {
-            failures.append("\(ref.sourceName): fonte indisponível")
-            return
-        }
-        pendingSources += 1
-        defer { pendingSources -= 1 }
-        do {
-            let (sourceDetail, chapters) = try await source.fetchDetails(remoteUrl: ref.remoteUrl)
-            let fallbackLanguage = source.language == "all" ? nil : source.language
-            let normalized = chapters.map { item -> SourceChapterItem in
-                var c = item
-                if c.sourceId.isEmpty { c.sourceId = ref.sourceId }
-                if c.mangaRemoteUrl.isEmpty { c.mangaRemoteUrl = ref.remoteUrl }
-                if c.language == nil { c.language = fallbackLanguage }
-                return c
-            }
-            allChapters += normalized
-            work.addLanguages(Array(Set(normalized.compactMap(\.language))).sorted())
-            details.append(LoadedDetail(language: source.language, detail: sourceDetail))
-            if work.coverUrl == nil, let cover = sourceDetail.coverUrl {
-                work.coverUrl = cover
-                work.coverSourceId = ref.sourceId
-            }
-            recompute()
-        } catch {
-            failures.append("\(ref.sourceName): \(error.localizedDescription)")
-        }
-    }
-
-    /// Busca a obra pelo título numa fonte multi-idioma e só aceita se algum título coincidir.
-    private func lookupMultiLanguage(sourceId: String) async {
-        guard !work.refs.contains(where: { $0.sourceId == sourceId }),
-              let source = SourceManager.shared.getSource(id: sourceId) else { return }
-        let candidates = [work.title] + work.refs.map(\.title)
-        var seenQueries = Set<String>()
-        for query in candidates where seenQueries.insert(TitleKey.normalize(query)).inserted {
-            guard query.count >= 3, let page = try? await source.search(query: query, page: 1) else { continue }
-            if let match = page.items.first(where: { !TitleKey.keys(for: [$0.title] + $0.altTitles).isDisjoint(with: work.titleKeys) }) {
-                let ref = WorkSourceRef(
-                    sourceId: match.sourceId,
-                    sourceName: source.name,
-                    remoteUrl: match.remoteUrl,
-                    title: match.title,
-                    coverUrl: match.coverUrl,
-                    languages: match.languages
-                )
-                work.merge(ref: ref, altTitles: match.altTitles)
-                await loadRef(ref)
-                return
-            }
-            if seenQueries.count >= 2 { return }
-        }
-    }
-
-    private func recompute() {
-        chaptersByLanguage = SourceAggregator.shared.chaptersByLanguage(allChapters)
+    private func apply(_ loader: WorkLoader) {
+        let state = loader.state
+        pendingSources = loader.pendingSources
+        work = state.work
+        failures = state.failures
+        chaptersByLanguage = state.chaptersByLanguage
         languages = SourceAggregator.shared.sortedLanguages(chaptersByLanguage, filter: filter)
 
         if let selectedLanguage, userPickedLanguage, chaptersByLanguage[selectedLanguage] != nil {
@@ -158,70 +77,17 @@ final class WorkDetailModel {
             selectedLanguage = languages.first
         }
 
-        // Detalhes: prefere a fonte no idioma do filtro e com sinopse
-        let ranked = details.sorted { a, b in
-            let la = filter.matches(a.language) || a.language == "all" ? 0 : 1
-            let lb = filter.matches(b.language) || b.language == "all" ? 0 : 1
-            if la != lb { return la < lb }
-            let da = (a.detail.description?.isEmpty ?? true) ? 1 : 0
-            let db = (b.detail.description?.isEmpty ?? true) ? 1 : 0
-            return da < db
+        if let merged = state.mergedDetail(filter: filter) {
+            detail = merged
+            isAdult = state.isAdult
         }
-        guard let best = ranked.first?.detail else { return }
-        var genres: [String] = []
-        for entry in ranked {
-            for genre in entry.detail.genres where !genres.contains(where: { $0.caseInsensitiveCompare(genre) == .orderedSame }) {
-                genres.append(genre)
-            }
-        }
-        isAdult = work.isAdult || ContentFilter.isAdult(genres: genres)
-        detail = SourceMangaDetail(
-            remoteUrl: best.remoteUrl,
-            title: best.title,
-            author: ranked.lazy.compactMap(\.detail.author).first(where: { !$0.isEmpty }),
-            artist: ranked.lazy.compactMap(\.detail.artist).first(where: { !$0.isEmpty }),
-            description: ranked.lazy.compactMap(\.detail.description).first(where: { !$0.isEmpty }),
-            genres: Array(genres.prefix(15)),
-            status: ranked.first(where: { $0.detail.status != 0 })?.detail.status ?? 0,
-            coverUrl: best.coverUrl
-        )
-    }
-}
-
-/// Marca capítulos como lidos (registro `Chapter` do SwiftData).
-enum ReadTracker {
-    @MainActor
-    static func setRead(_ read: Bool, chapter: SourceChapterItem, mangaId: String, context: ModelContext) {
-        let id = Chapter.storageId(mangaId: mangaId, sourceId: chapter.sourceId, remoteUrl: chapter.remoteUrl)
-        var descriptor = FetchDescriptor<Chapter>(predicate: #Predicate { $0.id == id })
-        descriptor.fetchLimit = 1
-        let record: Chapter
-        if let existing = try? context.fetch(descriptor).first {
-            record = existing
-        } else {
-            record = Chapter(
-                mangaId: mangaId,
-                remoteUrl: chapter.remoteUrl,
-                name: chapter.name,
-                chapterNumber: chapter.chapterNumber,
-                orderIndex: chapter.orderIndex,
-                scanlator: chapter.scanlator,
-                uploadDate: chapter.uploadDate,
-                sourceId: chapter.sourceId,
-                language: chapter.language
-            )
-            context.insert(record)
-        }
-        record.isRead = read
-        record.lastReadDate = read ? Date() : record.lastReadDate
-        try? context.save()
     }
 }
 
 public struct MangaDetailView: View {
     @Environment(\.modelContext) private var modelContext
-    @AppStorage(LanguageFilter.storageKey) private var filterRaw: String = LanguageFilter.portuguese.rawValue
-    @AppStorage(ContentFilter.blockAdultKey) private var blockAdult = true
+    @AppStorage(Preferences.Key.languageFilter) private var filterRaw: String = Preferences.Default.languageFilter.rawValue
+    @AppStorage(Preferences.Key.blockAdultTags) private var blockAdult = Preferences.Default.blockAdultTags
     @Query private var libraryMatches: [Manga]
     @Query private var chapterStates: [Chapter]
 
@@ -258,8 +124,8 @@ public struct MangaDetailView: View {
     /// Id usado para progresso de leitura: o da biblioteca (se já salva) ou o da obra.
     private var progressId: String { localManga?.id ?? mangaId }
 
-    private var readIds: Set<String> {
-        Set(chapterStates.filter(\.isRead).map(\.id))
+    private var progress: ChapterProgress {
+        ChapterProgress(records: chapterStates, mangaId: progressId)
     }
 
     public var body: some View {
@@ -280,7 +146,10 @@ public struct MangaDetailView: View {
         }
         .navigationTitle(model.displayTitle)
         .navigationBarTitleDisplayMode(.inline)
-        .refreshable { await model.reload() }
+        .refreshable {
+            await model.reload()
+            syncLibrary()
+        }
         .fullScreenCover(item: $readingChapter) { chapter in
             let list = model.chapters
             ReaderView(
@@ -298,6 +167,7 @@ public struct MangaDetailView: View {
         .onChange(of: model.selectedLanguage) { _, newValue in
             if let local = localManga, let newValue, local.preferredLanguage != newValue {
                 local.preferredLanguage = newValue
+                ChapterStore.refreshUnreadCount(manga: local, context: modelContext)
                 try? modelContext.save()
             }
         }
@@ -524,7 +394,7 @@ public struct MangaDetailView: View {
                 .font(.headline)
             Spacer()
             if let first = nextChapterToRead(chapters) {
-                Button(readIds.isEmpty ? "Começar" : "Continuar") {
+                Button(progress.hasAnyRead ? "Continuar" : "Começar") {
                     readingChapter = first
                 }
                 .buttonStyle(.bordered)
@@ -555,20 +425,24 @@ public struct MangaDetailView: View {
                 .padding()
             }
         } else {
-            let read = readIds
+            let progress = progress
             LazyVStack(spacing: 0) {
                 ForEach(chapters) { ch in
-                    let isRead = read.contains(Chapter.storageId(mangaId: progressId, sourceId: ch.sourceId, remoteUrl: ch.remoteUrl))
+                    let isRead = progress.isRead(ch)
+                    let isBookmarked = progress.isBookmarked(ch)
                     Button {
                         readingChapter = ch
                     } label: {
                         ChapterRowView(
                             title: ch.name,
-                            scanlator: chapterSubtitle(ch),
+                            scanlator: chapterSubtitle(ch, pageInProgress: progress.pageInProgress(ch)),
                             isRead: isRead,
-                            isBookmarked: false,
+                            isBookmarked: isBookmarked,
                             onToggleRead: {
-                                ReadTracker.setRead(!isRead, chapter: ch, mangaId: progressId, context: modelContext)
+                                ChapterStore.setRead(!isRead, chapter: ch, mangaId: progressId, context: modelContext)
+                            },
+                            onToggleBookmark: {
+                                ChapterStore.setBookmarked(!isBookmarked, chapter: ch, mangaId: progressId, context: modelContext)
                             }
                         )
                     }
@@ -582,8 +456,9 @@ public struct MangaDetailView: View {
         }
     }
 
-    private func chapterSubtitle(_ ch: SourceChapterItem) -> String {
+    private func chapterSubtitle(_ ch: SourceChapterItem, pageInProgress: Int?) -> String {
         var parts: [String] = []
+        if let pageInProgress { parts.append("Página \(pageInProgress)") }
         if let scan = ch.scanlator, !scan.isEmpty { parts.append(scan) }
         if model.work.refs.count > 1 { parts.append(SourceManager.shared.sourceName(id: ch.sourceId)) }
         if let date = ch.uploadDate { parts.append(date.formatted(date: .abbreviated, time: .omitted)) }
@@ -592,14 +467,16 @@ public struct MangaDetailView: View {
 
     /// Primeiro capítulo não lido em ordem de leitura (lista está do mais novo para o mais antigo).
     private func nextChapterToRead(_ chapters: [SourceChapterItem]) -> SourceChapterItem? {
-        let read = readIds
-        return chapters.last(where: { !read.contains(Chapter.storageId(mangaId: progressId, sourceId: $0.sourceId, remoteUrl: $0.remoteUrl)) })
+        let progress = progress
+        return chapters.last(where: { !progress.isRead($0) })
     }
 
     // MARK: - Biblioteca
 
     private func toggleFavorite() {
+        let manga: Manga
         if let existing = localManga {
+            manga = existing
             existing.isFavorite.toggle()
             existing.favoriteAt = existing.isFavorite ? Date() : nil
             existing.sourcesJSON = model.work.refsJSON
@@ -620,8 +497,10 @@ public struct MangaDetailView: View {
             newManga.sourcesJSON = model.work.refsJSON
             newManga.preferredLanguage = model.selectedLanguage
             modelContext.insert(newManga)
+            manga = newManga
         }
         try? modelContext.save()
+        saveChapterList(of: manga)
     }
 
     /// Atualiza a obra salva com as fontes/idiomas descobertos.
@@ -634,5 +513,12 @@ public struct MangaDetailView: View {
         local.sourcesJSON = model.work.refsJSON
         local.lastUpdated = Date()
         try? modelContext.save()
+        saveChapterList(of: local)
+    }
+
+    /// Obras da biblioteca guardam a lista de capítulos (base para não lidos e novidades).
+    private func saveChapterList(of manga: Manga) {
+        guard manga.isFavorite, !model.isLoading, !model.chaptersByLanguage.isEmpty else { return }
+        ChapterStore.sync(model.chaptersByLanguage, manga: manga, context: modelContext)
     }
 }

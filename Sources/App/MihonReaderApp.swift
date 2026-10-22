@@ -3,25 +3,12 @@ import SwiftData
 
 @main
 struct MihonReaderApp: App {
-    var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            Manga.self,
-            Chapter.self,
-            HistoryEntry.self
-        ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-
-        do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
-        } catch {
-            fatalError("Could not create ModelContainer: \(error)")
-        }
-    }()
+    private let store = ModelStore.openRecovering()
 
     var body: some Scene {
         WindowGroup {
-            RootView()
+            RootView(storeWasReset: store.didReset)
         }
-        .modelContainer(sharedModelContainer)
+        .modelContainer(store.container)
     }
 }

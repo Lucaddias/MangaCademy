@@ -5,7 +5,7 @@ public struct LibraryView: View {
     @Query(filter: #Predicate<Manga> { $0.isFavorite == true }, sort: \.title)
     private var favoriteMangas: [Manga]
 
-    @AppStorage(LanguageFilter.storageKey) private var filterRaw: String = LanguageFilter.portuguese.rawValue
+    @AppStorage(Preferences.Key.languageFilter) private var filterRaw: String = Preferences.Default.languageFilter.rawValue
     @State private var searchText = ""
 
     private let columns = [
@@ -22,23 +22,6 @@ public struct LibraryView: View {
     }
 
     public init() {}
-
-    /// Reconstrói a obra unificada (todas as fontes/idiomas) salva na biblioteca.
-    private func work(for manga: Manga) -> UnifiedWork {
-        var refs = UnifiedWork.refs(fromJSON: manga.sourcesJSON)
-        if refs.isEmpty {
-            refs = [WorkSourceRef(
-                sourceId: manga.sourceId,
-                sourceName: SourceManager.shared.sourceName(id: manga.sourceId),
-                remoteUrl: manga.remoteUrl,
-                title: manga.title,
-                coverUrl: manga.coverUrl,
-                languages: []
-            )]
-        }
-        return UnifiedWork(id: manga.id, title: manga.title, coverUrl: manga.coverUrl, refs: refs)
-            ?? UnifiedWork(ref: refs[0])
-    }
 
     public var body: some View {
         NavigationStack {
@@ -60,7 +43,7 @@ public struct LibraryView: View {
                     ScrollView {
                         LazyVGrid(columns: columns, spacing: 16) {
                             ForEach(filteredMangas) { manga in
-                                let work = work(for: manga)
+                                let work = UnifiedWork(libraryManga: manga)
                                 NavigationLink {
                                     MangaDetailView(work: work)
                                 } label: {

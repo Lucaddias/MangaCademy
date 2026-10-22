@@ -6,7 +6,7 @@ public struct ExtensionsView: View {
     @State private var searchText = ""
     @State private var language: LanguageFilter = .portuguese
     @State private var onlySupported = true
-    @AppStorage("show_nsfw_sources") private var includeNsfw = false
+    @AppStorage(Preferences.Key.showNsfwSources) private var includeNsfw = Preferences.Default.showNsfwSources
 
     public init() {}
 

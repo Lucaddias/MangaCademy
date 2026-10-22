@@ -93,7 +93,7 @@ public final class CatalogFeed {
         self.filter = filter
         self.mode = mode
         self.includeNsfw = includeNsfw
-        blockAdult = ContentFilter.blockAdult
+        blockAdult = Preferences.blockAdultTags
         merger = WorkMerger()
         works = []
         isExhausted = false
