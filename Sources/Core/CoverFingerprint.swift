@@ -30,6 +30,10 @@ public final class ImageDiskStore: @unchecked Sendable {
         try? data.write(to: path(for: urlString), options: .atomic)
     }
 
+    public func remove(_ urlString: String) {
+        try? FileManager.default.removeItem(at: path(for: urlString))
+    }
+
     public func clear() {
         try? FileManager.default.removeItem(at: directory)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

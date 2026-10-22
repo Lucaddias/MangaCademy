@@ -42,8 +42,6 @@ public enum LanguageFilter: String, CaseIterable, Identifiable {
         case .all: return ["pt-BR", "pt", "en"]
         }
     }
-
-    public static let storageKey = "catalog_language_filter"
 }
 
 public enum LanguageCode {

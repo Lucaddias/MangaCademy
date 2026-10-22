@@ -36,6 +36,14 @@ public final class ImageCache {
         disk.store(data, for: urlString)
     }
     
+    /// Apaga só estas imagens (memória e disco), para baixá-las de novo.
+    public func remove(urlStrings: [String]) {
+        for urlString in urlStrings {
+            memoryCache.removeObject(forKey: NSString(string: urlString))
+            disk.remove(urlString)
+        }
+    }
+    
     public func clearCache() {
         memoryCache.removeAllObjects()
         disk.clear()

@@ -127,6 +127,42 @@ public struct UnifiedWork: Identifiable, Hashable {
     }
 }
 
+extension UnifiedWork {
+    /// Reconstrói a obra unificada (todas as fontes/idiomas) salva na biblioteca.
+    public init(libraryManga manga: Manga) {
+        var refs = UnifiedWork.refs(fromJSON: manga.sourcesJSON)
+        if refs.isEmpty {
+            refs = [WorkSourceRef(
+                sourceId: manga.sourceId,
+                sourceName: SourceManager.shared.sourceName(id: manga.sourceId),
+                remoteUrl: manga.remoteUrl,
+                title: manga.title,
+                coverUrl: manga.coverUrl,
+                languages: []
+            )]
+        }
+        self = UnifiedWork(id: manga.id, title: manga.title, coverUrl: manga.coverUrl, refs: refs)
+            ?? UnifiedWork(ref: refs[0])
+    }
+
+    /// Obra de uma fonte só a partir do id salvo ("fonte:endereço"), quando ela não está na biblioteca.
+    /// O id fica igual ao salvo, então o progresso de leitura continua valendo.
+    public init?(storedId: String, title: String, coverUrl: String?) {
+        guard let separator = storedId.firstIndex(of: ":") else { return nil }
+        let sourceId = String(storedId[..<separator])
+        let remoteUrl = String(storedId[storedId.index(after: separator)...])
+        guard !sourceId.isEmpty, !remoteUrl.isEmpty else { return nil }
+        self.init(ref: WorkSourceRef(
+            sourceId: sourceId,
+            sourceName: SourceManager.shared.sourceName(id: sourceId),
+            remoteUrl: remoteUrl,
+            title: title,
+            coverUrl: coverUrl,
+            languages: []
+        ))
+    }
+}
+
 /// Chave normalizada de título para detectar a mesma obra em fontes diferentes.
 public enum TitleKey {
     public static func normalize(_ title: String) -> String {

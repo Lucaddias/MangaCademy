@@ -21,9 +21,7 @@ public final class SourceAggregator {
             var best: [String: SourceChapterItem] = [:]
             var order: [String] = []
             for ch in list {
-                let key = ch.chapterNumber >= 0
-                    ? String(format: "%.3f", ch.chapterNumber)
-                    : "name:\(TitleKey.normalize(ch.name))"
+                let key = Self.dedupeKey(chapterNumber: ch.chapterNumber, name: ch.name)
                 if let existing = best[key] {
                     let a = availability[ch.sourceId] ?? 0
                     let b = availability[existing.sourceId] ?? 0
@@ -46,6 +44,12 @@ public final class SourceAggregator {
             }.map(\.element)
         }
         return result
+    }
+
+    /// Chave que identifica "o mesmo capítulo" vindo de fontes diferentes, dentro de um idioma:
+    /// o número, ou o nome normalizado quando a fonte não traz número.
+    public static func dedupeKey(chapterNumber: Double, name: String) -> String {
+        chapterNumber >= 0 ? String(format: "%.3f", chapterNumber) : "name:\(TitleKey.normalize(name))"
     }
 
     /// Ordena os idiomas: primeiro os do filtro ativo, depois por quantidade de capítulos.

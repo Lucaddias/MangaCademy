@@ -3,13 +3,21 @@ import SwiftUI
 public struct SettingsView: View {
     @State private var cacheCleared = false
     @State private var repository = KeiyoushiRepository.shared
-    @AppStorage("default_reader_webtoon") private var defaultReaderWebtoon = true
-    @AppStorage("show_nsfw_sources") private var showNsfw = false
-    @AppStorage(ContentFilter.blockAdultKey) private var blockAdult = true
-    @AppStorage(ReaderPreferences.volumeButtonsKey) private var volumeButtons = true
-    @AppStorage(ReaderPreferences.invertVolumeButtonsKey) private var invertVolumeButtons = false
+    @AppStorage(Preferences.Key.defaultReaderWebtoon) private var defaultReaderWebtoon = Preferences.Default.defaultReaderWebtoon
+    @AppStorage(Preferences.Key.showNsfwSources) private var showNsfw = Preferences.Default.showNsfwSources
+    @AppStorage(Preferences.Key.blockAdultTags) private var blockAdult = Preferences.Default.blockAdultTags
+    @AppStorage(Preferences.Key.readerVolumeButtons) private var volumeButtons = Preferences.Default.readerVolumeButtons
+    @AppStorage(Preferences.Key.readerInvertVolumeButtons) private var invertVolumeButtons = Preferences.Default.readerInvertVolumeButtons
 
     public init() {}
+
+    /// "1.0.0 (1)", lido do Info.plist do app.
+    private var appVersion: String {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info?["CFBundleVersion"] as? String ?? "?"
+        return "\(version) (\(build))"
+    }
 
     public var body: some View {
         NavigationStack {
@@ -96,7 +104,7 @@ public struct SettingsView: View {
                     HStack {
                         Text("Versão")
                         Spacer()
-                        Text("1.0.0 (TestFlight Build 1)")
+                        Text(appVersion)
                             .foregroundStyle(.secondary)
                     }
                     HStack {
