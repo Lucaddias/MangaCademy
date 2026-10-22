@@ -6,6 +6,8 @@ public struct SettingsView: View {
     @AppStorage("default_reader_webtoon") private var defaultReaderWebtoon = true
     @AppStorage("show_nsfw_sources") private var showNsfw = false
     @AppStorage(ContentFilter.blockAdultKey) private var blockAdult = true
+    @AppStorage(ReaderPreferences.volumeButtonsKey) private var volumeButtons = true
+    @AppStorage(ReaderPreferences.invertVolumeButtonsKey) private var invertVolumeButtons = false
 
     public init() {}
 
@@ -60,8 +62,17 @@ public struct SettingsView: View {
                     Text("Esconde do catálogo e da busca as obras que alguma fonte marca com a tag Adult, Adulto ou +18. Tags como “Vida Adulta” não são bloqueadas.")
                 }
 
-                Section(header: Text("Leitor")) {
+                Section {
                     Toggle("Modo Webtoon por padrão", isOn: $defaultReaderWebtoon)
+                    Toggle("Virar página com o volume", isOn: $volumeButtons)
+                    Toggle("Inverter botões de volume", isOn: $invertVolumeButtons)
+                        .disabled(!volumeButtons)
+                } header: {
+                    Text("Leitor")
+                } footer: {
+                    if volumeButtons {
+                        Text(ReaderPreferences.volumeButtonsFooter(inverted: invertVolumeButtons))
+                    }
                 }
 
                 Section(header: Text("Armazenamento & Cache")) {

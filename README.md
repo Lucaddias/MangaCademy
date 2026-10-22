@@ -40,6 +40,7 @@ Como as extensões originais são APKs Android, o app reimplementa em Swift os t
 - **Capítulos sem repetição** — capítulos de várias scans são mesclados e deduplicados por número.
 - **Bloqueio de conteúdo adulto** — esconde obras com as tags _Adult_, _Adulto_ ou _+18_ (ligado por padrão, ajustável em Ajustes). Tags como _Vida Adulta_ não são afetadas.
 - **Leitor Webtoon e paginado**, com progresso, histórico e biblioteca salvos localmente.
+- **Virar página com os botões de volume** — Volume − avança e Volume + volta (inversível em Ajustes). No fim do capítulo, um segundo clique abre o próximo.
 - **Cache em disco** de capas e metadados, para abrir o catálogo de novo sem refazer o trabalho.
 - **Fontes resilientes** — sites fora do ar ou atrás de proteção anti-bot são consultados por último e não travam o restante.
 
