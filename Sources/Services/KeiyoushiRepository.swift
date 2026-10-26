@@ -59,7 +59,10 @@ public struct KeiyoushiExtensionItem: Identifiable, Hashable, Codable {
     public let engine: KeiyoushiEngineConfig?
     public let sources: [KeiyoushiSourceInfo]
 
-    public var isNsfw: Bool { contentWarning == "NSFW" }
+    /// Marcada como +18 no índice, ou "MIXED" com nome de site adulto (ex.: Manhwa18TX).
+    public var isNsfw: Bool {
+        contentWarning == "NSFW" || (contentWarning != "SAFE" && ContentFilter.isAdultSourceName(name))
+    }
     public var isSupported: Bool { engine != nil }
 
     func with(engine: KeiyoushiEngineConfig?) -> KeiyoushiExtensionItem {

@@ -59,7 +59,7 @@ public final class MangaBallSource: ThemeSource, MangaSource {
         return SourceMangaPage(items: items, hasNextPage: (pagination.int("page") ?? page) < (pagination.int("total_pages") ?? 0))
     }
 
-    private func makeDetail(_ title: [String: Any]) -> SourceMangaDetail? {
+    func makeDetail(_ title: [String: Any]) -> SourceMangaDetail? {
         guard let id = title.string("id"), let name = title.string("name") else { return nil }
         let strings: (String) -> [String] = { key in (title[key] as? [Any] ?? []).compactMap { $0 as? String }.filter { !$0.trimmed.isEmpty } }
         let status: Int
@@ -78,7 +78,8 @@ public final class MangaBallSource: ThemeSource, MangaSource {
             title: name,
             author: authors.joined(separator: ", ").nilIfEmpty,
             description: strings("description").joined(separator: "\n\n").nilIfEmpty,
-            genres: title.array("tags").compactMap { $0.string("name") },
+            // Obras marcadas como 18+ pelo site nem sempre têm a tag "Adult"
+            genres: title.array("tags").compactMap { $0.string("name") } + ((title["is18plus"] as? Bool) == true ? ["Adult"] : []),
             status: status,
             coverUrl: Self.coverURL(title.dict("image")),
             altTitles: strings("alternateName")
