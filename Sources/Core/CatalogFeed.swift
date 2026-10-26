@@ -35,6 +35,8 @@ public final class CatalogFeed {
     public private(set) var blockedCount = 0
     public private(set) var mode: Mode = .popular
     public private(set) var filter: LanguageFilter = .all
+    /// Fonte única escolhida no Explorar; `nil` = todas as fontes do filtro.
+    public private(set) var sourceId: String?
     /// Tags escolhidas (chaves de `GenreTags`): só aparecem obras com todas elas.
     public private(set) var tagFilter: Set<String> = []
     /// Tags das obras já carregadas, das mais comuns para as menos comuns.
@@ -108,10 +110,11 @@ public final class CatalogFeed {
 
     public init() {}
 
-    /// Reinicia o feed (troca de filtro, modo, busca ou do filtro de conteúdo adulto).
-    public func reset(filter: LanguageFilter, mode: Mode, includeNsfw: Bool) {
+    /// Reinicia o feed (troca de filtro, modo, busca, fonte ou do filtro de conteúdo adulto).
+    public func reset(filter: LanguageFilter, mode: Mode, includeNsfw: Bool, sourceId: String? = nil) {
         generation += 1
         self.filter = filter
+        self.sourceId = sourceId
         self.mode = mode
         self.includeNsfw = includeNsfw
         blockAdult = Preferences.blockAdultTags
@@ -140,7 +143,8 @@ public final class CatalogFeed {
         loadedCount = 0
         matchingCount = 0
 
-        let sources = SourceHealth.prioritized(SourceManager.shared.catalogSources(for: filter, includeNsfw: includeNsfw))
+        var sources = SourceHealth.prioritized(SourceManager.shared.catalogSources(for: filter, includeNsfw: includeNsfw))
+        if let sourceId { sources = sources.filter { $0.id == sourceId } }
         sourcesById = Dictionary(sources.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         queue = sources.map(Cursor.init)
         queueHead = 0

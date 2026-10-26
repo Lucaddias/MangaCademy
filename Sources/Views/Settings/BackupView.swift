@@ -64,6 +64,7 @@ struct BackupView: View {
                 }
             }
         }
+        .themedList()
         .navigationTitle("Backup")
         .onAppear(perform: refreshList)
         .sheet(item: $shareItem) { ShareSheet(items: [$0.url]) }

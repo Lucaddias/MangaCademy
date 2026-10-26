@@ -35,6 +35,7 @@ struct SourcesListView: View {
                 }
             }
         }
+        .themedList()
         .searchable(text: $searchText, prompt: "Buscar fonte")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -54,11 +55,11 @@ struct SourcesListView: View {
                     Text(source.name)
                     Text(LanguageCode.shortLabel(source.language))
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.inkSecondary)
                 }
                 Spacer()
                 if settings.pinnedSources.contains(source.id) {
-                    Image(systemName: "pin.fill").font(.caption).foregroundStyle(.secondary)
+                    Image(systemName: "pin.fill").font(.caption).foregroundStyle(Theme.inkSecondary)
                 }
             }
         }
@@ -66,7 +67,7 @@ struct SourcesListView: View {
             Button(settings.pinnedSources.contains(source.id) ? "Desafixar" : "Fixar", systemImage: "pin") {
                 settings.toggle(source.id, in: \.pinnedSources)
             }
-            .tint(.orange)
+            .tint(Theme.caution)
         }
         .contextMenu {
             Button(settings.pinnedSources.contains(source.id) ? "Desafixar" : "Fixar", systemImage: "pin") {
@@ -81,6 +82,94 @@ struct SourcesListView: View {
                 settings.disabledSources.insert(source.id)
             }
         }
+    }
+}
+
+/// Fonte do catálogo do Explorar: todas, NexusToons, as fixadas e o resto por idioma.
+struct CatalogSourcePicker: View {
+    /// Fonte em destaque: primeira da lista e do menu do título.
+    static let featuredId = "nexustoons"
+
+    /// Id da fonte escolhida; vazio = todas.
+    @Binding var selection: String
+
+    @AppStorage(Preferences.Key.showNsfwSources) private var showNsfw = Preferences.Default.showNsfwSources
+    @Environment(\.dismiss) private var dismiss
+    @State private var settings = SourceSettings.shared
+    @State private var searchText = ""
+
+    private var sources: [MangaSource] {
+        _ = settings.disabledSources
+        _ = settings.disabledLanguages
+        return SourceManager.shared.browsableSources(includeNsfw: showNsfw)
+    }
+
+    var body: some View {
+        let all = sources
+        let query = searchText.trimmed
+        let list = query.isEmpty ? all : all.filter { $0.name.localizedCaseInsensitiveContains(query) }
+        let featured = list.filter { $0.id == Self.featuredId }
+        let pinned = list
+            .filter { $0.id != Self.featuredId && settings.pinnedSources.contains($0.id) }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        let grouped = Dictionary(grouping: list.filter { $0.id != Self.featuredId && !settings.pinnedSources.contains($0.id) }, by: \.language)
+        let languages = grouped.keys.sorted { LanguageOrder.rank($0) < LanguageOrder.rank($1) }
+
+        List {
+            if query.isEmpty || !featured.isEmpty {
+                Section {
+                    if query.isEmpty {
+                        row(id: "", title: "Todas as fontes", detail: "\(all.count) fontes")
+                    }
+                    ForEach(featured, id: \.id) { row($0) }
+                }
+            }
+            if !pinned.isEmpty {
+                Section("Fixadas") { ForEach(pinned, id: \.id) { row($0) } }
+            }
+            ForEach(languages, id: \.self) { language in
+                Section(LanguageCode.displayName(language)) {
+                    ForEach(grouped[language]!.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }, id: \.id) { row($0) }
+                }
+            }
+        }
+        .themedList()
+        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Buscar fonte")
+        .navigationTitle("Fonte")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Fechar") { dismiss() }
+            }
+        }
+    }
+
+    private func row(_ source: MangaSource) -> some View {
+        row(id: source.id, title: source.name, detail: LanguageCode.shortLabel(source.language))
+    }
+
+    private func row(id: String, title: String, detail: String) -> some View {
+        Button {
+            selection = id
+            dismiss()
+        } label: {
+            HStack {
+                VStack(alignment: .leading, spacing: Theme.Space.xxs) {
+                    Text(title).textRole(.body)
+                    Text(detail).textRole(.caption)
+                }
+                Spacer()
+                if selection == id {
+                    Image(systemName: "checkmark")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Theme.accent)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(Theme.surface)
+        .accessibilityAddTraits(selection == id ? .isSelected : [])
     }
 }
 
@@ -116,7 +205,7 @@ struct SourcesFilterView: View {
             Section {
                 Text("Fontes desativadas saem do catálogo, da busca e da lista de fontes.")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.inkSecondary)
             }
             ForEach(grouped.keys.sorted { LanguageOrder.rank($0) < LanguageOrder.rank($1) }, id: \.self) { language in
                 Section {
@@ -132,6 +221,7 @@ struct SourcesFilterView: View {
                 }
             }
         }
+        .themedList()
         .navigationTitle("Fontes")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -237,10 +327,10 @@ struct SourceBrowseView: View {
             VStack(spacing: 10) {
                 Image(systemName: isBlocked ? "shield.lefthalf.filled" : "wifi.exclamationmark")
                     .font(.largeTitle)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.inkSecondary)
                 Text(error.localizedDescription)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.inkSecondary)
                     .multilineTextAlignment(.center)
                 if isBlocked {
                     Button("Resolver no navegador") { showWeb = true }
@@ -253,7 +343,7 @@ struct SourceBrowseView: View {
             ProgressView().padding()
         } else if works.isEmpty {
             Text(activeQuery == nil ? "Nenhuma obra" : "Nada encontrado para “\(activeQuery ?? "")”")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.inkSecondary)
                 .padding()
         }
     }

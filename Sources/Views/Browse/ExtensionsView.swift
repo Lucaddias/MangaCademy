@@ -40,6 +40,7 @@ public struct ExtensionsView: View {
                 }
             }
         }
+        .themedList()
         .navigationTitle("Repositório Keiyoushi")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: "Buscar extensão ou scan...")
@@ -64,21 +65,21 @@ private struct ExtensionRow: View {
                             .font(.subheadline.bold())
                             .lineLimit(1)
                         if item.isNsfw {
-                            BadgeView("18+", color: .red)
+                            BadgeView("18+", color: Theme.critical)
                         }
                     }
                     Text("v\(item.version) • \(item.engine?.type ?? "sem motor iOS")")
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.inkSecondary)
                         .lineLimit(1)
                 }
 
                 Spacer()
 
                 if item.isSupported {
-                    BadgeView("Ativa", color: .green)
+                    BadgeView("Ativa", color: Theme.positive)
                 } else {
-                    BadgeView("Indisponível", color: .secondary)
+                    BadgeView("Indisponível", color: Theme.inkSecondary)
                 }
             }
 
@@ -90,7 +91,7 @@ private struct ExtensionRow: View {
                                 .font(.caption2)
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 4)
-                                .background(Color.secondary.opacity(0.1))
+                                .background(Theme.fill)
                                 .clipShape(Capsule())
                         }
                     }

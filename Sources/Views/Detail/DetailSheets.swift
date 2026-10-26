@@ -37,6 +37,7 @@ struct ChapterOptionsSheet: View {
                     Text("Obras sem ajuste próprio usam o padrão.")
                 }
             }
+            .themedList()
             .navigationTitle("Capítulos")
             .navigationBarTitleDisplayMode(.inline)
         }
@@ -49,8 +50,8 @@ struct ChapterOptionsSheet: View {
         } label: {
             HStack {
                 Image(systemName: flags[keyPath: keyPath].symbol)
-                    .foregroundStyle(flags[keyPath: keyPath] == .exclude ? Color.red : Color.accentColor)
-                Text(title).foregroundStyle(.primary)
+                    .foregroundStyle(flags[keyPath: keyPath] == .exclude ? Theme.critical : Theme.accent)
+                Text(title).foregroundStyle(Theme.ink)
             }
         }
     }
@@ -87,7 +88,7 @@ struct ScanlatorFilterSheet: View {
                 Section {
                     if scanlators.isEmpty {
                         Text("As fontes desta obra não informam as scans.")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.inkSecondary)
                     }
                     ForEach(scanlators, id: \.self) { scan in
                         toggle(scan, key: scan)
@@ -98,6 +99,7 @@ struct ScanlatorFilterSheet: View {
                     if !canSave { Text("Só fica salvo para obras da biblioteca.") }
                 }
             }
+            .themedList()
             .navigationTitle("Scans e fontes")
             .navigationBarTitleDisplayMode(.inline)
         }
@@ -131,11 +133,11 @@ struct ManageSourcesSheet: View {
                                 .frame(width: 36, height: 54)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(ref.sourceName).font(.subheadline.bold())
-                                Text(ref.title).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                Text(ref.title).font(.caption).foregroundStyle(Theme.inkSecondary).lineLimit(1)
                             }
                             Spacer()
                             if ref.coverUrl != nil && ref.coverUrl == model.work.coverUrl {
-                                Image(systemName: "photo.fill").foregroundStyle(.secondary)
+                                Image(systemName: "photo.fill").foregroundStyle(Theme.inkSecondary)
                             }
                         }
                         .swipeActions {
@@ -181,6 +183,7 @@ struct ManageSourcesSheet: View {
                     }
                 }
             }
+            .themedList()
             .navigationTitle("Fontes desta obra")
             .navigationBarTitleDisplayMode(.inline)
         }
@@ -207,10 +210,11 @@ private struct AttachSourceView: View {
                 HStack {
                     Text(source.name)
                     Spacer()
-                    Text(LanguageCode.shortLabel(source.language)).font(.caption).foregroundStyle(.secondary)
+                    Text(LanguageCode.shortLabel(source.language)).font(.caption).foregroundStyle(Theme.inkSecondary)
                 }
             }
         }
+        .themedList()
         .searchable(text: $filter, prompt: "Fonte")
         .navigationTitle("Escolha a fonte")
     }
@@ -229,7 +233,7 @@ private struct SourceSearchPicker: View {
     var body: some View {
         List {
             if isLoading { ProgressView().frame(maxWidth: .infinity) }
-            if let error { Text(error).foregroundStyle(.red).font(.caption) }
+            if let error { Text(error).foregroundStyle(Theme.critical).font(.caption) }
             ForEach(results) { item in
                 Button {
                     onPick(WorkSourceRef(sourceId: source.id, sourceName: source.name, remoteUrl: item.remoteUrl, title: item.title, coverUrl: item.coverUrl, languages: item.languages))
@@ -237,11 +241,12 @@ private struct SourceSearchPicker: View {
                     HStack(spacing: 12) {
                         AsyncMangaCover(urlString: item.coverUrl, cornerRadius: 4, referer: source.imageReferer)
                             .frame(width: 36, height: 54)
-                        Text(item.title).foregroundStyle(.primary)
+                        Text(item.title).foregroundStyle(Theme.ink)
                     }
                 }
             }
         }
+        .themedList()
         .searchable(text: $query, prompt: "Buscar em \(source.name)")
         .onSubmit(of: .search) { Task { await search() } }
         .navigationTitle(source.name)
@@ -313,7 +318,7 @@ struct CoverSheet: View {
                     ProgressView()
                 }
                 if let message {
-                    Text(message).font(.caption).foregroundStyle(.secondary)
+                    Text(message).font(.caption).foregroundStyle(Theme.inkSecondary)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -411,7 +416,7 @@ struct SearchResultsView: View {
             if feed.isExhausted {
                 Text(feed.works.isEmpty ? (isTag ? "Nenhuma obra com essas tags." : "Nada encontrado para “\(query)”.") : "Fim dos resultados")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.inkSecondary)
                     .padding()
             } else {
                 VStack(spacing: 6) {
@@ -419,7 +424,7 @@ struct SearchResultsView: View {
                     if isTag {
                         Text("\(feed.works.count) de \(feed.loadedCount) obras verificadas têm as tags")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.inkSecondary)
                     }
                 }
                 .padding()

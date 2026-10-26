@@ -162,6 +162,8 @@ public struct MangaDetailView: View {
     @State private var showTracking = false
     /// "Marcar todos como lidos" (true) ou "Desmarcar todos" (false) esperando confirmação.
     @State private var bulkRead: Bool?
+    /// O cabeçalho (com o título) está na tela; quando sai, o título vai para a barra.
+    @State private var headerVisible = true
 
     private let mangaId: String
 
@@ -237,6 +239,8 @@ public struct MangaDetailView: View {
             } else {
                 Group {
                     header
+                        .onAppear { headerVisible = true }
+                        .onDisappear { headerVisible = false }
                     genresRow
                     synopsis
                     notesRow
@@ -244,11 +248,13 @@ public struct MangaDetailView: View {
                     languageSection
                 }
                 .listRowSeparator(.hidden)
-                .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: Theme.Space.s, leading: 0, bottom: Theme.Space.s, trailing: 0))
                 chapterSection
             }
         }
         .listStyle(.plain)
+        .themedList()
         .navigationTitle(model.displayTitle)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbar }
@@ -361,6 +367,16 @@ public struct MangaDetailView: View {
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
+        // O título já está no cabeçalho; na barra só aparece depois que ele sai da tela
+        ToolbarItem(placement: .principal) {
+            Text(model.displayTitle)
+                .font(.headline)
+                .foregroundStyle(Theme.ink)
+                .lineLimit(1)
+                .opacity(headerVisible ? 0 : 1)
+                .animation(.easeInOut(duration: 0.2), value: headerVisible)
+                .accessibilityHidden(headerVisible)
+        }
         if selecting {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("OK") {
@@ -456,66 +472,85 @@ public struct MangaDetailView: View {
     // MARK: - Cabeçalho
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 16) {
+        HStack(alignment: .top, spacing: Theme.Space.l) {
             Button { showCover = true } label: {
-                AsyncMangaCover(urlString: coverUrl, cornerRadius: 10, referer: localManga?.customCoverPath == nil ? model.coverReferer : nil)
+                // Moldura fixa: capas largas são cortadas em vez de vazar para a margem
+                Color.clear
                     .frame(width: 110, height: 165)
-                    .shadow(color: .black.opacity(0.15), radius: 6, x: 0, y: 3)
+                    .overlay {
+                        AsyncMangaCover(urlString: coverUrl, cornerRadius: Theme.Radius.cover, referer: localManga?.customCoverPath == nil ? model.coverReferer : nil)
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.cover))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: Theme.Radius.cover)
+                            .strokeBorder(Theme.hairline, lineWidth: 0.5)
+                    }
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Ver capa")
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: Theme.Space.s) {
                 Text(model.displayTitle)
-                    .font(.headline)
-                    .fontWeight(.bold)
+                    .textRole(.title)
                     .lineLimit(3)
                     .contextMenu {
                         Button { UIPasteboard.general.string = model.displayTitle } label: { Label("Copiar título", systemImage: "doc.on.doc") }
                         Button { searchQuery = SearchRequest(query: model.displayTitle) } label: { Label("Buscar em todas as fontes", systemImage: "magnifyingglass") }
                     }
 
-                if let author = model.detail?.author, !author.isEmpty {
-                    Button { searchQuery = SearchRequest(query: author) } label: {
-                        Text("Autor: \(author)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                if let artist = model.detail?.artist, !artist.isEmpty, artist != model.detail?.author {
-                    Button { searchQuery = SearchRequest(query: artist) } label: {
-                        Text("Artista: \(artist)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                    .buttonStyle(.plain)
-                }
+                credits
 
                 HStack(spacing: 6) {
                     BadgeView(statusText, color: statusColor)
-                    BadgeView(model.work.refs.count == 1 ? model.work.refs[0].sourceName : "\(model.work.refs.count) fontes", color: .purple)
+                    Button { showSources = true } label: {
+                        BadgeView(model.work.refs.count == 1 ? model.work.refs[0].sourceName : "\(model.work.refs.count) fontes", color: Theme.inkSecondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Mostra as fontes desta obra")
                 }
-                .padding(.top, 4)
 
-                Spacer(minLength: 4)
+                Spacer(minLength: Theme.Space.xs)
 
                 Button {
                     toggleFavorite()
                 } label: {
-                    Label(isFavorited ? "Na Biblioteca" : "Adicionar", systemImage: isFavorited ? "heart.fill" : "heart")
-                        .font(.caption.bold())
+                    Label(isFavorited ? "Na biblioteca" : "Adicionar", systemImage: isFavorited ? "heart.fill" : "heart")
+                        .font(.footnote.weight(.semibold))
                         .frame(maxWidth: .infinity)
+                        .padding(.vertical, Theme.Space.s)
+                        .foregroundStyle(isFavorited ? Theme.accent : Theme.ink)
+                        .background(isFavorited ? Theme.accentSoft : Theme.fill, in: Capsule())
+                        .contentShape(Capsule())
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(isFavorited ? .pink : .blue)
-                .controlSize(.small)
+                .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal)
+        .padding(.horizontal, Theme.Space.margin)
+    }
+
+    /// Autor e artista sem rótulo: o toque busca o nome em todas as fontes.
+    @ViewBuilder
+    private var credits: some View {
+        let author = model.detail?.author.flatMap { $0.isEmpty ? nil : $0 }
+        let artist = model.detail?.artist.flatMap { $0.isEmpty || $0 == author ? nil : $0 }
+        if author != nil || artist != nil {
+            VStack(alignment: .leading, spacing: 2) {
+                if let author {
+                    Button { searchQuery = SearchRequest(query: author) } label: {
+                        Text(author).textRole(.meta).lineLimit(1)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Autor: \(author)")
+                }
+                if let artist {
+                    Button { searchQuery = SearchRequest(query: artist) } label: {
+                        Text(artist).textRole(.meta).lineLimit(1)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Artista: \(artist)")
+                }
+            }
+        }
     }
 
     private var statusText: String {
@@ -528,13 +563,13 @@ public struct MangaDetailView: View {
         }
     }
 
+    /// Em lançamento é o normal e fica neutro; cor só para o que foge disso.
     private var statusColor: Color {
         switch model.detail?.status ?? 0 {
-        case 1: return .blue
-        case 2: return .green
-        case 3: return .red
-        case 4: return .orange
-        default: return .secondary
+        case 2: return Theme.positive
+        case 3: return Theme.critical
+        case 4: return Theme.caution
+        default: return Theme.inkSecondary
         }
     }
 
@@ -543,12 +578,11 @@ public struct MangaDetailView: View {
         VStack(spacing: 12) {
             Image(systemName: "eye.slash")
                 .font(.largeTitle)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.inkTertiary)
             Text("Obra bloqueada")
-                .font(.headline)
-            Text("Uma das fontes marca esta obra com a tag Adulto/Adult. Para vê-la, desligue “Bloquear obras com tag adulta” em Ajustes.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .textRole(.section)
+            Text("Marcada como adulta. Dá para liberar em Ajustes.")
+                .textRole(.meta)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
@@ -563,12 +597,12 @@ public struct MangaDetailView: View {
                 HStack(spacing: 8) {
                     ForEach(genres, id: \.self) { genre in
                         Button { searchQuery = SearchRequest(query: genre, isTag: true) } label: {
-                            BadgeView(genre, color: .secondary)
+                            BadgeView(genre, color: Theme.inkSecondary)
                         }
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, Theme.Space.margin)
             }
         }
     }
@@ -576,16 +610,15 @@ public struct MangaDetailView: View {
     @ViewBuilder
     private var synopsis: some View {
         if let desc = model.detail?.description, !desc.isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Sinopse")
-                    .font(.subheadline.bold())
-                Text(Self.markdown(desc))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(showAllSynopsis ? nil : 6)
-                    .onTapGesture { withAnimation { showAllSynopsis.toggle() } }
-            }
-            .padding(.horizontal)
+            // Sem o rótulo "Sinopse": o texto se explica sozinho
+            Text(Self.markdown(desc))
+                .textRole(.meta)
+                .lineLimit(showAllSynopsis ? nil : 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture { withAnimation { showAllSynopsis.toggle() } }
+                .accessibilityHint(showAllSynopsis ? "Recolhe a sinopse" : "Mostra a sinopse inteira")
+                .padding(.horizontal, Theme.Space.margin)
         }
     }
 
@@ -599,83 +632,60 @@ public struct MangaDetailView: View {
     private var notesRow: some View {
         if let notes = localManga?.notes, !notes.isEmpty {
             Button { showNotes = true } label: {
-                VStack(alignment: .leading, spacing: 4) {
-                    Label("Notas", systemImage: "note.text")
-                        .font(.subheadline.bold())
+                Label {
                     Text(Self.markdown(notes))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .textRole(.meta)
                         .lineLimit(4)
+                } icon: {
+                    Image(systemName: "note.text")
+                        .foregroundStyle(Theme.caution)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(10)
-                .background(Color.yellow.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+                .padding(Theme.Space.m)
+                .background(Theme.caution.opacity(0.10), in: RoundedRectangle(cornerRadius: Theme.Radius.card))
             }
             .buttonStyle(.plain)
-            .padding(.horizontal)
+            .accessibilityLabel("Notas")
+            .padding(.horizontal, Theme.Space.margin)
         }
     }
 
     // MARK: - Idiomas
 
+    /// Idiomas só quando há escolha a fazer; com um idioma só, ele aparece no cabeçalho dos capítulos.
+    @ViewBuilder
     private var languageSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Divider().padding(.horizontal)
-            HStack {
-                Text("Idioma dos capítulos")
-                    .font(.headline)
-                Spacer()
-                if model.isLoading {
-                    ProgressView().controlSize(.small)
-                }
-            }
-            .padding(.horizontal)
-
-            if model.languages.isEmpty {
-                if !model.isLoading && model.hasLoaded {
-                    Text("Nenhum capítulo disponível nas fontes desta obra.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal)
-                }
-            } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(model.languages, id: \.self) { language in
-                            languageChip(language)
-                        }
-                    }
-                    .padding(.horizontal)
-                }
-            }
-
-            if !model.work.refs.isEmpty {
-                DisclosureGroup {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(model.work.refs) { ref in
-                            HStack {
-                                Text(ref.sourceName)
-                                    .font(.caption)
-                                Spacer()
-                                Text(sourceLanguageLabel(ref))
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
+        if model.languages.count > 1 || !model.failures.isEmpty {
+            VStack(alignment: .leading, spacing: Theme.Space.s) {
+                if model.languages.count > 1 {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: Theme.Space.s) {
+                            ForEach(model.languages, id: \.self) { language in
+                                languageChip(language)
                             }
                         }
-                        ForEach(model.failures, id: \.self) { failure in
-                            Text(failure)
-                                .font(.caption2)
-                                .foregroundStyle(.orange)
-                                .lineLimit(2)
-                        }
+                        .padding(.horizontal, Theme.Space.margin)
                     }
-                    .padding(.top, 4)
-                } label: {
-                    Text("Encontrada em \(model.work.refs.count) \(model.work.refs.count == 1 ? "fonte" : "fontes")")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
-                .padding(.horizontal)
+
+                if !model.failures.isEmpty {
+                    DisclosureGroup {
+                        VStack(alignment: .leading, spacing: Theme.Space.xs) {
+                            ForEach(model.failures, id: \.self) { failure in
+                                Text(failure)
+                                    .textRole(.caption)
+                                    .lineLimit(2)
+                            }
+                        }
+                        .padding(.top, Theme.Space.xs)
+                    } label: {
+                        Label("\(model.failures.count) \(model.failures.count == 1 ? "fonte falhou" : "fontes falharam")", systemImage: "exclamationmark.triangle")
+                            .textRole(.meta)
+                            .foregroundStyle(Theme.caution)
+                    }
+                    .tint(Theme.inkTertiary)
+                    .padding(.horizontal, Theme.Space.margin)
+                }
             }
         }
     }
@@ -686,27 +696,11 @@ public struct MangaDetailView: View {
         return Button {
             withAnimation(.snappy) { model.pickLanguage(language) }
         } label: {
-            HStack(spacing: 4) {
-                Text(LanguageCode.displayName(language))
-                Text("\(count)")
-                    .monospacedDigit()
-                    .foregroundStyle(selected ? Color.white.opacity(0.85) : Color.secondary)
-            }
-            .font(.caption.weight(.semibold))
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-            .background(selected ? Color.accentColor : Color.secondary.opacity(0.12))
-            .foregroundStyle(selected ? Color.white : Color.primary)
-            .clipShape(Capsule())
+            Chip(title: LanguageCode.displayName(language), count: count, isSelected: selected)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(LanguageCode.displayName(language)), \(count) capítulos")
         .accessibilityAddTraits(selected ? .isSelected : [])
-    }
-
-    private func sourceLanguageLabel(_ ref: WorkSourceRef) -> String {
-        guard let source = SourceManager.shared.getSource(id: ref.sourceId) else { return "" }
-        return source.language == "all" ? "Vários idiomas" : LanguageCode.displayName(source.language)
     }
 
     // MARK: - Capítulos
@@ -718,84 +712,99 @@ public struct MangaDetailView: View {
         let flags = flags
         let totalMissing = flags.hideMissing ? 0 : missingTotal(model.chapters)
 
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("Capítulos (\(chapters.count))")
-                    .font(.headline)
+        VStack(alignment: .leading, spacing: Theme.Space.m) {
+            HStack(spacing: Theme.Space.m) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(chapters.count == 1 ? "1 capítulo" : "\(chapters.count) capítulos")
+                        .textRole(.section)
+                    if model.languages.count == 1, let language = model.selectedLanguage {
+                        Text(LanguageCode.displayName(language))
+                            .textRole(.caption)
+                    }
+                }
+                if model.isLoading {
+                    ProgressView().controlSize(.small)
+                }
                 Spacer()
+                if !chapters.isEmpty {
+                    let readCount = chapters.filter(progress.isRead).count
+                    Menu {
+                        Button { bulkRead = true } label: { Label("Marcar todos como lidos", systemImage: "checkmark.circle") }
+                            .disabled(readCount == chapters.count)
+                        Button { bulkRead = false } label: { Label("Desmarcar todos", systemImage: "circle") }
+                            .disabled(readCount == 0)
+                    } label: {
+                        Image(systemName: "checklist")
+                    }
+                    .accessibilityLabel("Marcar ou desmarcar todos")
+                }
                 Button {
                     showChapterOptions = true
                 } label: {
                     Image(systemName: flags.hasActiveFilter ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
                 }
-                .buttonStyle(.borderless)
                 .accessibilityLabel("Filtrar e ordenar capítulos")
             }
+            .font(.body)
+            .foregroundStyle(Theme.ink)
+            .buttonStyle(.borderless)
+
             if let next = nextChapterToRead(model.chapters, progress: progress) {
+                let label = continueLabel(next, progress: progress)
                 Button {
                     readingChapter = next
                 } label: {
-                    Label(continueTitle(next, progress: progress), systemImage: "play.fill")
-                        .font(.subheadline.bold())
-                        .frame(maxWidth: .infinity)
+                    HStack(spacing: Theme.Space.s) {
+                        Image(systemName: "play.fill")
+                        Text(label.verb).fontWeight(.semibold)
+                        Text(label.detail)
+                            .lineLimit(1)
+                            .opacity(0.8)
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.onAccent)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, Theme.Space.m)
+                    .background(Theme.accent, in: Capsule())
+                    .contentShape(Capsule())
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.plain)
+                .accessibilityLabel(label.spoken)
             }
             if totalMissing > 0 {
-                Label("\(totalMissing) \(totalMissing == 1 ? "capítulo faltando" : "capítulos faltando") na numeração", systemImage: "exclamationmark.triangle")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-            }
-            if !chapters.isEmpty {
-                let readCount = chapters.filter(progress.isRead).count
-                HStack(spacing: 8) {
-                    Button { bulkRead = true } label: {
-                        // "Marcar todos como lidos" não cabe ao lado de "Desmarcar todos" no iPhone
-                        Label("Marcar todos", systemImage: "checkmark.circle")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .accessibilityLabel("Marcar todos como lidos")
-                    .disabled(readCount == chapters.count)
-                    Button { bulkRead = false } label: {
-                        Label("Desmarcar todos", systemImage: "circle")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .accessibilityLabel("Desmarcar todos os capítulos")
-                    .disabled(readCount == 0)
-                }
-                .font(.footnote.weight(.medium))
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-                .buttonStyle(.bordered)
+                Label("\(totalMissing) \(totalMissing == 1 ? "capítulo faltando" : "capítulos faltando")", systemImage: "exclamationmark.triangle")
+                    .textRole(.caption)
+                    .foregroundStyle(Theme.caution)
             }
         }
-        .padding(.horizontal)
+        .padding(.horizontal, Theme.Space.margin)
         .listRowSeparator(.hidden)
-        .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+        .listRowBackground(Color.clear)
+        .listRowInsets(EdgeInsets(top: Theme.Space.l, leading: 0, bottom: Theme.Space.s, trailing: 0))
 
         if chapters.isEmpty {
             Group {
                 if model.isLoading && model.chapters.isEmpty {
-                    ProgressView("Carregando capítulos de \(model.work.refs.count) fontes…")
+                    ProgressView()
                         .frame(maxWidth: .infinity)
-                        .padding()
+                        .padding(Theme.Space.xl)
                 } else if model.hasLoaded {
-                    VStack(spacing: 8) {
+                    VStack(spacing: Theme.Space.m) {
                         Text(emptyChaptersText)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .textRole(.meta)
                         if model.chapters.isEmpty {
-                            Button("Tentar novamente") {
+                            Button("Tentar de novo") {
                                 Task { await model.reload() }
                             }
                             .buttonStyle(.bordered)
                         }
                     }
                     .frame(maxWidth: .infinity)
-                    .padding()
+                    .padding(Theme.Space.xl)
                 }
             }
             .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
         } else {
             ForEach(Array(chapters.enumerated()), id: \.element.id) { offset, ch in
                 chapterRow(ch, progress: progress, flags: flags)
@@ -804,9 +813,10 @@ public struct MangaDetailView: View {
                     if gap > 0 {
                         Text("— \(gap) \(gap == 1 ? "capítulo faltando" : "capítulos faltando") —")
                             .font(.caption2)
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(Theme.caution)
                             .frame(maxWidth: .infinity)
                             .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
                     }
                 }
             }
@@ -814,8 +824,9 @@ public struct MangaDetailView: View {
     }
 
     private var emptyChaptersText: String {
-        if !model.chapters.isEmpty { return "Nenhum capítulo com os filtros atuais." }
-        return model.failures.isEmpty ? "Sem capítulos neste idioma." : "Não foi possível carregar os capítulos."
+        if !model.chapters.isEmpty { return "Nenhum capítulo com esses filtros." }
+        if !model.failures.isEmpty { return "Não foi possível carregar os capítulos." }
+        return model.languages.isEmpty ? "Nenhum capítulo nas fontes desta obra." : "Sem capítulos neste idioma."
     }
 
     private func chapterRow(_ ch: SourceChapterItem, progress: ChapterProgress, flags: ChapterListFlags) -> some View {
@@ -831,7 +842,7 @@ public struct MangaDetailView: View {
             HStack(spacing: 10) {
                 if selecting {
                     Image(systemName: selected.contains(ch.id) ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(selected.contains(ch.id) ? Color.accentColor : .secondary)
+                        .foregroundStyle(selected.contains(ch.id) ? Theme.accent : Theme.inkTertiary)
                 }
                 ChapterRowView(
                     title: flags.displayName(ch),
@@ -849,6 +860,9 @@ public struct MangaDetailView: View {
             }
         }
         .buttonStyle(.plain)
+        .listRowBackground(Color.clear)
+        .listRowSeparatorTint(Theme.hairline)
+        .listRowInsets(EdgeInsets(top: 0, leading: Theme.Space.margin, bottom: 0, trailing: Theme.Space.margin))
         .swipeActions(edge: .leading) { swipeButton(ChapterSwipeAction.leading, ch, isRead: isRead, isBookmarked: isBookmarked) }
         .swipeActions(edge: .trailing) { swipeButton(ChapterSwipeAction.trailing, ch, isRead: isRead, isBookmarked: isBookmarked) }
         .contextMenu {
@@ -914,23 +928,23 @@ public struct MangaDetailView: View {
             Button { ChapterStore.setRead(!isRead, chapter: ch, mangaId: progressId, context: modelContext) } label: {
                 Label(isRead ? "Não lido" : "Lido", systemImage: isRead ? "circle" : "checkmark.circle")
             }
-            .tint(.blue)
+            .tint(Theme.accent)
         case .toggleBookmark:
             Button { ChapterStore.setBookmarked(!isBookmarked, chapter: ch, mangaId: progressId, context: modelContext) } label: {
                 Label("Marcador", systemImage: isBookmarked ? "bookmark.slash" : "bookmark")
             }
-            .tint(.yellow)
+            .tint(Theme.caution)
         case .markPreviousRead:
             Button { ChapterStore.markPreviousRead(before: ch, in: model.chapters, mangaId: progressId, context: modelContext) } label: {
                 Label("Anteriores", systemImage: "text.badge.checkmark")
             }
-            .tint(.indigo)
+            .tint(Theme.inkSecondary)
         case .download:
             let downloaded = DownloadManager.shared.state(of: ch, mangaId: progressId) != .none
             Button { toggleDownload(ch) } label: {
                 Label(downloaded ? "Apagar" : "Baixar", systemImage: downloaded ? "trash" : "arrow.down.circle")
             }
-            .tint(downloaded ? .red : .green)
+            .tint(downloaded ? Theme.critical : Theme.positive)
         case .disabled:
             EmptyView()
         }
@@ -962,11 +976,18 @@ public struct MangaDetailView: View {
         return chapters.last(where: { !progress.isRead($0) })
     }
 
-    private func continueTitle(_ chapter: SourceChapterItem, progress: ChapterProgress) -> String {
-        let name = flags.displayName(chapter)
-        guard progress.hasAnyRead || progress.pageInProgress(chapter) != nil else { return "Começar: \(name)" }
-        if let page = progress.pageInProgress(chapter) { return "Continuar \(name) · pág. \(page)" }
-        return "Continuar \(name)"
+    /// "Continuar" + "Cap. 12 · p. 3": curto para caber numa linha; o leitor de tela ouve o nome inteiro.
+    private func continueLabel(_ chapter: SourceChapterItem, progress: ChapterProgress) -> (verb: String, detail: String, spoken: String) {
+        let page = progress.pageInProgress(chapter)
+        let verb = progress.hasAnyRead || page != nil ? "Continuar" : "Começar"
+        let number = chapter.chapterNumber
+        var detail = number >= 0 ? "Cap. \(number.rounded() == number ? String(Int(number)) : String(format: "%g", number))" : flags.displayName(chapter)
+        var spoken = "\(verb) \(flags.displayName(chapter))"
+        if let page {
+            detail += " · p. \(page)"
+            spoken += ", página \(page)"
+        }
+        return (verb, detail, spoken)
     }
 
     private func missingTotal(_ chapters: [SourceChapterItem]) -> Int {
@@ -982,14 +1003,22 @@ public struct MangaDetailView: View {
                 Button {
                     webTarget = WebTarget(title: source.name, url: url)
                 } label: {
-                    Label("\(source.name) pediu uma verificação anti-bot. Toque para resolver.", systemImage: "shield.lefthalf.filled")
-                        .font(.footnote)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(10)
-                        .background(Color.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+                    HStack(spacing: Theme.Space.s) {
+                        Image(systemName: "shield.lefthalf.filled")
+                            .foregroundStyle(Theme.caution)
+                        Text("\(source.name) pede verificação")
+                            .foregroundStyle(Theme.ink)
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right")
+                            .foregroundStyle(Theme.inkTertiary)
+                    }
+                    .font(.footnote)
+                    .padding(Theme.Space.m)
+                    .background(Theme.caution.opacity(0.10), in: RoundedRectangle(cornerRadius: Theme.Radius.card))
                 }
                 .buttonStyle(.plain)
-                .padding(.horizontal)
+                .accessibilityHint("Abre o site para resolver a verificação anti-bot")
+                .padding(.horizontal, Theme.Space.margin)
             }
         }
     }

@@ -18,6 +18,8 @@ public enum Preferences {
         public static let readerInvertVolumeButtons = "reader_volume_buttons_inverted"
         /// Modo anônimo: não grava histórico nem progresso.
         public static let incognito = "incognito_mode"
+        /// Fonte escolhida no Explorar (id); vazio = todas as fontes.
+        public static let catalogSource = "catalog_source"
     }
 
     public enum Default {

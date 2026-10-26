@@ -46,6 +46,7 @@ struct TrackingSheet: View {
                     }
                 }
             }
+            .themedList()
             .navigationTitle("Rastreamento")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -148,7 +149,7 @@ private struct TrackSearchView: View {
     var body: some View {
         NavigationStack {
             List {
-                if let error { Text(error).foregroundStyle(.red).font(.footnote) }
+                if let error { Text(error).foregroundStyle(Theme.critical).font(.footnote) }
                 ForEach(results) { result in
                     Button {
                         onPick(result)
@@ -159,9 +160,9 @@ private struct TrackSearchView: View {
                                 .frame(width: 50, height: 75)
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(result.title).font(.subheadline.bold())
-                                if let publishing = result.publishing { Text(publishing).font(.caption).foregroundStyle(.secondary) }
+                                if let publishing = result.publishing { Text(publishing).font(.caption).foregroundStyle(Theme.inkSecondary) }
                                 if let summary = result.summary {
-                                    Text(summary).font(.caption).foregroundStyle(.secondary).lineLimit(3)
+                                    Text(summary).font(.caption).foregroundStyle(Theme.inkSecondary).lineLimit(3)
                                 }
                             }
                         }
@@ -169,6 +170,7 @@ private struct TrackSearchView: View {
                     .buttonStyle(.plain)
                 }
             }
+            .themedList()
             .overlay { if isLoading { ProgressView() } }
             .navigationTitle(tracker.name)
             .navigationBarTitleDisplayMode(.inline)
@@ -225,7 +227,7 @@ struct TrackersSettingsView: View {
                         } else if let login = tracker.login {
                             Button("Entrar") { start(login, tracker: tracker) }
                         } else {
-                            Text("Precisa de client ID").font(.caption).foregroundStyle(.secondary)
+                            Text("Precisa de client ID").font(.caption).foregroundStyle(Theme.inkSecondary)
                         }
                     }
                 }
@@ -236,6 +238,7 @@ struct TrackersSettingsView: View {
                 Toggle("Atualizar ao marcar como lido", isOn: $manager.updateOnRead)
             }
         }
+        .themedList()
         .navigationTitle("Rastreamento")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $passwordLogin) { target in
@@ -285,8 +288,9 @@ private struct PasswordLoginView: View {
                     .autocorrectionDisabled()
                 SecureField("Senha", text: $password)
                     .textContentType(.password)
-                if let error { Text(error).foregroundStyle(.red).font(.footnote) }
+                if let error { Text(error).foregroundStyle(Theme.critical).font(.footnote) }
             }
+            .themedList()
             .navigationTitle(tracker.name)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

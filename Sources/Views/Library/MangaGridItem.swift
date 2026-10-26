@@ -91,13 +91,13 @@ public struct MangaGridItem: View {
         }
         .overlay {
             if isSelected {
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.accentColor, lineWidth: 3)
-                    .background(Color.accentColor.opacity(0.18).clipShape(RoundedRectangle(cornerRadius: 8)))
+                RoundedRectangle(cornerRadius: Theme.Radius.cover)
+                    .stroke(Theme.accent, lineWidth: 3)
+                    .background(Theme.accentSoft.clipShape(RoundedRectangle(cornerRadius: Theme.Radius.cover)))
                     .overlay(alignment: .topLeading) {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.title3)
-                            .foregroundStyle(.white, Color.accentColor)
+                            .foregroundStyle(Theme.onAccent, Theme.accent)
                             .padding(6)
                     }
             }
@@ -105,23 +105,20 @@ public struct MangaGridItem: View {
     }
 
     private var listRow: some View {
-        HStack(spacing: 12) {
-            AsyncMangaCover(urlString: coverUrl, cornerRadius: 6, referer: coverReferer, fallbacks: coverFallbacks)
+        HStack(spacing: Theme.Space.m) {
+            AsyncMangaCover(urlString: coverUrl, cornerRadius: Theme.Radius.thumb, referer: coverReferer, fallbacks: coverFallbacks)
                 .frame(width: 46, height: 69)
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Theme.Space.xs) {
                 Text(title)
-                    .font(.subheadline.weight(.medium))
+                    .textRole(.bodyStrong)
                     .lineLimit(2)
-                    .foregroundStyle(.primary)
                 if let languageText {
                     Text(languageText)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .textRole(.caption)
                 }
                 if let caption {
                     Text(caption)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .textRole(.caption)
                         .lineLimit(1)
                 }
             }
@@ -131,40 +128,28 @@ public struct MangaGridItem: View {
                 continueButton(onContinue)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, Theme.Space.s)
         .contentShape(Rectangle())
     }
 
+    /// Só não lidos levam a cor da marca; o resto fica no véu neutro da capa.
     @ViewBuilder
     private var badges: some View {
         HStack(spacing: 3) {
             if let count = downloadCount, count > 0 {
-                Text("\(count)")
-                    .font(.caption2.bold())
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color.teal)
-                    .clipShape(Capsule())
+                CoverBadge(text: "\(count)", systemImage: "arrow.down")
                     .accessibilityLabel("\(count) baixados")
             }
             if let count = unreadCount, count > 0 {
-                Text("\(count)")
-                    .font(.caption2.bold())
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color.blue)
-                    .clipShape(Capsule())
+                CoverBadge(text: "\(count)", tint: Theme.accent, foreground: Theme.onAccent)
                     .accessibilityLabel("\(count) não lidos")
             }
             if inLibrary {
                 Image(systemName: "heart.fill")
-                    .font(.caption2)
-                    .foregroundStyle(.white)
-                    .padding(4)
-                    .background(Color.pink)
-                    .clipShape(Circle())
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(Theme.onAccent)
+                    .padding(5)
+                    .background(Theme.accent, in: Circle())
                     .accessibilityLabel("Na biblioteca")
             }
         }
@@ -174,25 +159,29 @@ public struct MangaGridItem: View {
         Button(action: action) {
             Image(systemName: "play.fill")
                 .font(.caption)
-                .foregroundStyle(.white)
+                .foregroundStyle(Theme.onAccent)
                 .padding(8)
-                .background(Color.accentColor.opacity(0.9))
-                .clipShape(Circle())
+                .background(Theme.accent, in: Circle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Continuar lendo")
     }
 
     private var gridCell: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
             // Moldura 2:3 fixa: capas com proporções diferentes são cortadas, nunca vazam da célula
             Color.clear
                 .aspectRatio(2/3, contentMode: .fit)
                 .overlay {
-                    AsyncMangaCover(urlString: coverUrl, cornerRadius: 8, referer: coverReferer, fallbacks: coverFallbacks)
+                    AsyncMangaCover(urlString: coverUrl, cornerRadius: Theme.Radius.cover, referer: coverReferer, fallbacks: coverFallbacks)
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .opacity(inLibrary ? 0.55 : 1)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.cover))
+                .opacity(inLibrary ? 0.5 : 1)
+                // Contorno fino no lugar da sombra: some no escuro e não suja capas claras
+                .overlay {
+                    RoundedRectangle(cornerRadius: Theme.Radius.cover)
+                        .strokeBorder(Theme.hairline, lineWidth: 0.5)
+                }
                 .overlay(alignment: .topTrailing) {
                     badges.padding(6)
                 }
@@ -210,36 +199,21 @@ public struct MangaGridItem: View {
                             .padding(6)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(LinearGradient(colors: [.clear, .black.opacity(0.85)], startPoint: .top, endPoint: .bottom))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.cover))
                     }
                 }
                 .overlay(alignment: .bottom) {
                     // Idiomas à esquerda e nº de fontes à direita na mesma linha: não se sobrepõem
                     HStack(spacing: 4) {
                         if let languageText {
-                            Text(languageText)
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(.white)
-                                .lineLimit(1)
+                            CoverBadge(text: languageText)
                                 .truncationMode(.tail)
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 2)
-                                .background(.black.opacity(0.65))
-                                .clipShape(RoundedRectangle(cornerRadius: 4))
                                 .accessibilityLabel("Idiomas: \(languageText)")
                         }
                         Spacer(minLength: 0)
                         if sourceCount > 1 {
-                            Label("\(sourceCount)", systemImage: "square.stack.fill")
-                                .labelStyle(.titleAndIcon)
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(.white)
-                                .lineLimit(1)
+                            CoverBadge(text: "\(sourceCount)", systemImage: "square.stack")
                                 .fixedSize()
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 2)
-                                .background(Color.purple.opacity(0.85))
-                                .clipShape(RoundedRectangle(cornerRadius: 4))
                                 .layoutPriority(1)
                                 .accessibilityLabel("Disponível em \(sourceCount) fontes")
                         }
@@ -247,25 +221,23 @@ public struct MangaGridItem: View {
                     .padding(5)
                     .opacity(displayMode == .compactGrid ? 0 : 1)
                 }
-                .shadow(color: .black.opacity(0.12), radius: 4, x: 0, y: 2)
 
             if displayMode == .comfortableGrid {
                 Text(title)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(Theme.ink)
                     .lineLimit(2, reservesSpace: true)
-                    .foregroundStyle(.primary)
             }
 
             if let caption {
                 Text(caption)
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.inkTertiary)
                     .lineLimit(1)
             }
 
             if let badge = badgeText, !badge.isEmpty {
-                BadgeView(badge, color: .secondary)
+                BadgeView(badge, color: Theme.inkSecondary)
             }
         }
     }
