@@ -10,6 +10,7 @@ public struct SettingsView: View {
     @Query(sort: \MangaCategory.order) private var categories: [MangaCategory]
     @AppStorage("chapter_swipe_start") private var swipeStart = ChapterSwipeAction.toggleBookmark.rawValue
     @AppStorage("chapter_swipe_end") private var swipeEnd = ChapterSwipeAction.toggleRead.rawValue
+    @AppStorage(Preferences.Key.languageFilter) private var filterRaw: String = Preferences.Default.languageFilter.rawValue
     @AppStorage(Preferences.Key.showNsfwSources) private var showNsfw = Preferences.Default.showNsfwSources
     @AppStorage(Preferences.Key.blockAdultTags) private var blockAdult = Preferences.Default.blockAdultTags
     @AppStorage(Preferences.Key.readerVolumeButtons) private var volumeButtons = Preferences.Default.readerVolumeButtons
@@ -39,6 +40,17 @@ public struct SettingsView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
+                    }
+
+                    // Antes era a aba "Fontes" do Explorar
+                    NavigationLink("Fontes") {
+                        SourcesListView()
+                            .navigationTitle("Fontes")
+                            .navigationBarTitleDisplayMode(.inline)
+                    }
+
+                    Picker("Idioma preferido", selection: $filterRaw) {
+                        ForEach(LanguageFilter.allCases) { Text($0.title).tag($0.rawValue) }
                     }
 
                     Toggle("Mostrar fontes +18", isOn: $showNsfw)
@@ -157,6 +169,14 @@ public struct SettingsView: View {
                 }
             }
             .navigationTitle("Configurações")
+            .navigationDestination(for: SourceRoute.self) { route in
+                if let source = SourceManager.shared.getSource(id: route.id) {
+                    SourceBrowseView(source: source)
+                }
+            }
+            .navigationDestination(for: UnifiedWork.self) { work in
+                MangaDetailView(work: work)
+            }
         }
     }
 }

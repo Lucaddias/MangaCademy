@@ -190,11 +190,15 @@ struct OnboardingView: View {
                     Text("Leia mangás, manhwas e webtoons de centenas de fontes, como no Mihon.")
                         .font(.callout)
                 }
-                Section("Idioma do catálogo") {
+                Section {
                     Picker("Idioma", selection: $filterRaw) {
                         ForEach(LanguageFilter.allCases) { Text($0.title).tag($0.rawValue) }
                     }
                     .pickerStyle(.segmented)
+                } header: {
+                    Text("Idioma preferido")
+                } footer: {
+                    Text("O Explorar mostra obras de todos os idiomas; os capítulos neste idioma aparecem primeiro.")
                 }
                 Section {
                     Toggle("Esconder conteúdo adulto", isOn: $blockAdult)

@@ -10,7 +10,7 @@
 [![Swift](https://img.shields.io/badge/Swift-5-F05138?logo=swift&logoColor=white)](https://www.swift.org)
 [![SwiftUI](https://img.shields.io/badge/UI-SwiftUI-0D96F6?logo=swift&logoColor=white)](https://developer.apple.com/xcode/swiftui/)
 [![SwiftData](https://img.shields.io/badge/persist%C3%AAncia-SwiftData-5856D6)](https://developer.apple.com/xcode/swiftdata/)
-[![Fontes](https://img.shields.io/badge/fontes-440%2B-0A5BB5)](#fontes)
+[![Fontes](https://img.shields.io/badge/fontes-670-0A5BB5)](#fontes)
 
 [Recursos](#recursos) •
 [Fontes](#fontes) •
@@ -36,32 +36,52 @@ Como as extensões originais são APKs Android, o app reimplementa em Swift os t
   - títulos e títulos alternativos idênticos;
   - títulos traduzidos com o mesmo significado (_“Ilusão de Amor: Superstar”_ = _“Love is an Illusion! - Superstar”_ = _“El amor es una ilusión Superstar”_);
   - impressão digital da capa (dHash), que reconhece a mesma arte mesmo redimensionada.
-- **Filtro rápido de idioma** — Português, Inglês ou Todos. Cada obra mostra apenas os capítulos disponíveis no idioma escolhido.
+- **Todos os idiomas no Explorar** — o catálogo mostra obras de todas as fontes, em qualquer idioma. O idioma preferido (Ajustes) define quais capítulos aparecem primeiro.
+- **Recentes de verdade** — a aba Recentes ordena as obras pelo capítulo mais novo de todas as fontes, com a legenda _“Cap. 123 · há 2 h”_.
+- **Filtro por tags** — Romance, Escolar, Ficção científica… no Explorar e na Biblioteca. Sinônimos em vários idiomas viram a mesma tag (_School Life_ = _Vida Escolar_ = _Escolar_), e a obra precisa ter todas as tags marcadas.
 - **Capítulos sem repetição** — capítulos de várias scans são mesclados e deduplicados por número.
 - **Bloqueio de conteúdo adulto** — esconde obras com as tags _Adult_, _Adulto_ ou _+18_ (ligado por padrão, ajustável em Ajustes). Tags como _Vida Adulta_ não são afetadas.
 - **Leitor Webtoon e paginado**, com progresso, histórico e biblioteca salvos localmente.
+- **Marcar todos / desmarcar todos** — acima da lista de capítulos, com confirmação; vale também para obras fora da biblioteca.
 - **Virar página com os botões de volume** — Volume − avança e Volume + volta (inversível em Ajustes). No fim do capítulo, um segundo clique abre o próximo.
 - **Cache em disco** de capas e metadados, para abrir o catálogo de novo sem refazer o trabalho.
 - **Fontes resilientes** — sites fora do ar ou atrás de proteção anti-bot são consultados por último e não travam o restante.
 
 ## Fontes
 
-O índice de extensões vem do repositório [keiyoushi/extensions](https://github.com/keiyoushi/extensions) e é atualizado dentro do app (Ajustes → Atualizar índice do repositório).
+O índice de extensões vem do repositório [keiyoushi/extensions](https://github.com/keiyoushi/extensions) e é atualizado dentro do app (Ajustes → Atualizar índice do repositório). Das 2.344 fontes do índice, **670** usam um motor que o app implementa:
 
 | Motor | Tipo | Exemplos |
 | --- | --- | --- |
 | **Madara** | Tema WordPress | Centenas de scans em PT, EN, ES e outros idiomas |
 | **MangaThemesia** | Tema WordPress | Tsundoku Traduções e similares |
 | **ZeistManga** | Tema Blogger | Ler 999 e similares |
-| **Keyoapp** | Tema | Mist Scans e similares |
+| **Keyoapp** e **Keyoapp V2** | Tema | Mist Scans, Luna Toons e similares |
 | **Iken** | API JSON | Ken Scans e similares |
+| **MangaCatalog** | Tema | Sites de uma franquia só (Read Berserk, Read One Piece…) |
+| **YiiManga** | Tema | ManhwaBuddy, LeerManhwas e similares |
+| **MangaHub** | API GraphQL | Rede MangaHub (MangaFox.fun, MangaHere.onl…) |
+| **PizzaReader** | API JSON | Scans italianas e francesas (FMTEAM, Hasta Team…) |
+| **FoolSlide** | Leitor | Scans antigas em EN, ES e IT (NIFTeam, Menudo-Fansub…) |
+| **Guya** | API JSON | Guya, Danke fürs Lesen e similares |
+| **MMRCMS** | Tema | Scan VF, AnzManga e similares |
 | **MangaDex** | API oficial | Multi-idioma |
+| **NamiComi**, **GlobalComix**, **MangaBall** | API | Multi-idioma (uma fonte por idioma) |
+| **Webtoons** | HTML + API | Multi-idioma |
+| **ComicFury** | HTML | Webcomics independentes, multi-idioma |
 | **ComicK** | API | Multi-idioma |
 | **NexusToons** | API cifrada | Português |
 | **Weeb Central** | HTML (HTMX) | Inglês |
 
 > [!NOTE]
 > Sites protegidos por Cloudflare ou bloqueados pela sua rede/DNS podem não responder. O app segue funcionando com as demais fontes.
+
+As outras extensões têm código próprio para cada site (ou usam temas ainda não portados) e ficam de fora até ganharem um motor. Para gerar o catálogo de novo e conferir quais fontes estão respondendo:
+
+```bash
+python3 tools/build_keiyoushi_catalog.py   # atualiza Resources/keiyoushi_catalog.json
+python3 tools/check_sources.py --out saude.md   # ok, Cloudflare, fora do ar, HTML mudou
+```
 
 ## Como funciona
 
@@ -109,7 +129,7 @@ Sources/
 ├── Models/       # Modelos de fonte e de domínio (SwiftData)
 ├── Services/     # Índice Keiyoushi e cache de imagens
 ├── Sources/      # Implementações das fontes
-│   └── Engines/  # Temas reutilizáveis (Madara, MangaThemesia, Iken…)
+│   └── Engines/  # Temas reutilizáveis (Madara, MangaThemesia, Iken, YiiManga…)
 └── Views/        # Explorar, Biblioteca, Histórico, Detalhe, Leitor e Ajustes
 ```
 
@@ -120,6 +140,8 @@ Sources/
 | `TitleConcepts` | Normaliza títulos PT/ES/FR para conceitos em inglês |
 | `CoverFingerprint` | dHash de 64 bits das capas |
 | `ContentFilter` | Regras do bloqueio de tags adultas |
+| `GenreTags` | Junta sinônimos de tags em vários idiomas para o filtro por tags |
+| `ChapterDateParser` | Datas de capítulo relativas e absolutas em vários idiomas |
 | `SourceAggregator` | Agrupa e deduplica capítulos por idioma |
 
 ## Contribuindo

@@ -16,11 +16,11 @@ public final class NexusToonsSource: MangaSource {
     private var headers: [String: String] { ["Referer": "\(baseUrl)/"] }
 
     public func fetchPopular(page: Int) async throws -> SourceMangaPage {
-        try await list("\(baseUrl)/api/mangas?page=\(page)&limit=\(pageSize)")
+        try await list("\(baseUrl)/api/mangas?page=\(page)&limit=\(pageSize)&sortBy=views&sortOrder=desc")
     }
 
     public func fetchLatest(page: Int) async throws -> SourceMangaPage {
-        try await fetchPopular(page: page)
+        try await list("\(baseUrl)/api/mangas?page=\(page)&limit=\(pageSize)&sortBy=lastChapterAt&sortOrder=desc")
     }
 
     public func search(query: String, page: Int) async throws -> SourceMangaPage {
@@ -40,12 +40,21 @@ public final class NexusToonsSource: MangaSource {
                 languages: [language],
                 altTitles: Self.alternativeTitles(item["alternativeTitles"]),
                 genres: Self.genres(item),
-                hasFullMetadata: true
+                hasFullMetadata: true,
+                latestChapterName: Self.latestChapterName(item),
+                latestChapterDate: item.string("lastChapterAt").flatMap(DateParsing.iso)
             )
         }
         let page = json.int("page") ?? 1
         let pages = json.int("pages") ?? page
         return SourceMangaPage(items: items, hasNextPage: page < pages && !items.isEmpty)
+    }
+
+    /// A listagem traz os últimos capítulos (`chapters`): o mais novo é o de maior número.
+    private static func latestChapterName(_ manga: [String: Any]) -> String? {
+        let numbers = manga.array("chapters").compactMap { $0.string("number") }
+        guard let newest = numbers.max(by: { (Double($0) ?? -1) < (Double($1) ?? -1) }) else { return nil }
+        return "Cap. \(newest)"
     }
 
     /// Categorias: na listagem vêm como `{category: {name}}`, nos detalhes como `{name}`.

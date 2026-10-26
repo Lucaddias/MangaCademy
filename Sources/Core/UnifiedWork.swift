@@ -33,6 +33,9 @@ public struct UnifiedWork: Identifiable, Hashable {
     public private(set) var genres: [String] = []
     /// Alguma fonte marcou a obra como conteúdo adulto ("Adult", "Adulto", "+18"...).
     public private(set) var isAdult = false
+    /// Capítulo mais novo entre as fontes (quando a listagem informa), para "Recentes".
+    public private(set) var latestChapterName: String?
+    public private(set) var latestChapterDate: Date?
 
     public init(ref: WorkSourceRef, altTitles: [String] = [], genres: [String] = []) {
         self.id = ref.id
@@ -83,6 +86,17 @@ public struct UnifiedWork: Identifiable, Hashable {
         }
     }
 
+    /// Guarda o capítulo se for mais novo que o conhecido (com data vale mais que sem data).
+    public mutating func noteLatestChapter(name: String?, date: Date?) {
+        if let date {
+            guard latestChapterDate.map({ date > $0 }) ?? true else { return }
+            latestChapterDate = date
+            latestChapterName = name
+        } else if latestChapterDate == nil, latestChapterName == nil, let name {
+            latestChapterName = name
+        }
+    }
+
     public mutating func addLanguages(_ langs: [String]) {
         for lang in langs where !languages.contains(lang) {
             languages.append(lang)
@@ -128,6 +142,22 @@ public struct UnifiedWork: Identifiable, Hashable {
 }
 
 extension UnifiedWork {
+    private static let relativeFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = Locale(identifier: "pt_BR")
+        formatter.unitsStyle = .abbreviated
+        return formatter
+    }()
+
+    /// "Cap. 123 · há 2 h" (só o que a fonte informou).
+    public func latestChapterCaption(now: Date = Date()) -> String? {
+        let when = latestChapterDate.map { date in
+            now.timeIntervalSince(date) < 60 ? "agora" : Self.relativeFormatter.localizedString(for: date, relativeTo: now)
+        }
+        let parts = [latestChapterName?.collapsedWhitespace.nilIfEmpty, when].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
     /// Reconstrói a obra unificada (todas as fontes/idiomas) salva na biblioteca.
     public init(libraryManga manga: Manga) {
         var refs = UnifiedWork.refs(fromJSON: manga.sourcesJSON)
@@ -269,12 +299,14 @@ public struct WorkMerger {
         if let target {
             let wasAdult = works[target].isAdult
             works[target].merge(ref: ref, altTitles: item.altTitles, genres: item.genres)
+            works[target].noteLatestChapter(name: item.latestChapterName, date: item.latestChapterDate)
             if !wasAdult && works[target].isAdult { adultCount += 1 }
             register(item, sets: sets, coverHash: hash, at: target)
             return false
         }
 
-        let work = UnifiedWork(ref: ref, altTitles: item.altTitles, genres: item.genres)
+        var work = UnifiedWork(ref: ref, altTitles: item.altTitles, genres: item.genres)
+        work.noteLatestChapter(name: item.latestChapterName, date: item.latestChapterDate)
         if work.isAdult { adultCount += 1 }
         works.append(work)
         conceptSets.append([])

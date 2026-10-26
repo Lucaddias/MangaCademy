@@ -27,7 +27,17 @@ public final class IkenSource: ThemeSource, MangaSource {
         let items: [SourceMangaItem] = posts.compactMap { post in
             guard !isNovel(post), let id = post.int("id"), let slug = post.string("slug"),
                   let title = post.string("postTitle") else { return nil }
-            return item(remoteUrl: "\(slug)#\(id)", title: title, cover: post.string("featuredImage"))
+            var result = item(remoteUrl: "\(slug)#\(id)", title: title, cover: post.string("featuredImage"))
+            // A listagem traz os últimos capítulos de cada obra
+            let newest = post.array("chapters")
+                .compactMap { chapter -> (number: String?, date: Date)? in
+                    guard let date = chapter.string("createdAt").flatMap(DateParsing.iso) else { return nil }
+                    return (chapter.string("number"), date)
+                }
+                .max { $0.date < $1.date }
+            result.latestChapterName = newest?.number.map { "Cap. \($0)" }
+            result.latestChapterDate = newest?.date
+            return result
         }
         let total = root.int("totalCount") ?? 0
         return SourceMangaPage(items: items, hasNextPage: total > page * perPage)

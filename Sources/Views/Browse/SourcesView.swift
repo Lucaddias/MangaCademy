@@ -190,7 +190,7 @@ struct SourceBrowseView: View {
             }
             LazyVGrid(columns: columns, spacing: 16) {
                 ForEach(works) { work in
-                    CatalogCell(work: work, filter: filter, index: index)
+                    CatalogCell(work: work, filter: filter, index: index, showsLatestChapter: mode == .latest && activeQuery == nil)
                         .onAppear { if work.id == works.last?.id { loadMore() } }
                 }
             }
@@ -293,7 +293,8 @@ struct SourceBrowseView: View {
                         sourceId: source.id, sourceName: source.name, remoteUrl: item.remoteUrl, title: item.title,
                         coverUrl: item.coverUrl, languages: item.languages.isEmpty ? fallback : item.languages
                     )
-                    let work = UnifiedWork(ref: ref, altTitles: item.altTitles, genres: item.genres)
+                    var work = UnifiedWork(ref: ref, altTitles: item.altTitles, genres: item.genres)
+                    work.noteLatestChapter(name: item.latestChapterName, date: item.latestChapterDate)
                     if known.contains(work.id) || (blockAdult && work.isAdult) { return nil }
                     return work
                 }

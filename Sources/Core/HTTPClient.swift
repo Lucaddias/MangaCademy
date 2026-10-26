@@ -161,9 +161,11 @@ public enum DateParsing {
     }()
     private static let plain = ISO8601DateFormatter()
 
-    /// Datas ISO-8601 com ou sem frações de segundo.
+    /// Datas ISO-8601 com ou sem frações de segundo (até microssegundos, como "…23.466336+01:00").
     public static func iso(_ value: String) -> Date? {
-        withFraction.date(from: value) ?? plain.date(from: value)
+        if let date = withFraction.date(from: value) ?? plain.date(from: value) { return date }
+        let trimmed = value.replacingOccurrences(of: #"(\.\d{3})\d+"#, with: "$1", options: .regularExpression)
+        return trimmed == value ? nil : withFraction.date(from: trimmed)
     }
 }
 
@@ -171,8 +173,8 @@ public enum StatusParser {
     /// 0: Desconhecido, 1: Em lançamento, 2: Completo, 3: Cancelado, 4: Hiato
     public static func parse(_ text: String?) -> Int {
         guard let t = text?.lowercased(), !t.isEmpty else { return 0 }
-        let completed = ["completed", "completo", "completado", "concluído", "concluido", "finalizado", "finished", "terminé", "complété"]
-        let ongoing = ["ongoing", "on going", "em lançamento", "em andamento", "lançando", "ativo", "updating", "publishing", "en curso", "en cours", "em postagem"]
+        let completed = ["completed", "completo", "completado", "concluído", "concluido", "finalizado", "finished", "terminé", "complété", "concluso", "completato", "مكتملة", "zakończone"]
+        let ongoing = ["ongoing", "on going", "em lançamento", "em andamento", "lançando", "ativo", "updating", "publishing", "en curso", "en cours", "em postagem", "in corso", "publicándose", "publicandose", "مستمرة"]
         let hiatus = ["hiatus", "on hold", "pausado", "hiato", "en pause"]
         let cancelled = ["cancelled", "canceled", "cancelado", "dropped", "abandonado", "dropado"]
         if completed.contains(where: t.contains) { return 2 }

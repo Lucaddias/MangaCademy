@@ -31,6 +31,19 @@ struct LibraryLogicTests {
         #expect(LibraryQuery.matches(a, search: "id:a"))
     }
 
+    @Test func tagFilterNeedsEveryTagAcrossLanguages() {
+        let list = [
+            entry("a", title: "A", genres: ["Romance", "School Life"]),
+            entry("b", title: "B", genres: ["Romântico", "Vida Escolar", "Comédia"]),
+            entry("c", title: "C", genres: ["Romance", "Sci-Fi"]),
+        ]
+        var filters = LibraryQuery.Filters()
+        filters.tags = [GenreTags.key(for: "romance"), GenreTags.key(for: "Escolar")]
+        #expect(LibraryQuery.apply(list, filters: filters, search: "", sort: .alphabetical, ascending: true).map(\.id) == ["a", "b"])
+        filters.tags = [GenreTags.key(for: "Ficção Científica")]
+        #expect(LibraryQuery.apply(list, filters: filters, search: "", sort: .alphabetical, ascending: true).map(\.id) == ["c"])
+    }
+
     @Test func sortingByLastReadDescending() {
         let old = entry("a", title: "A", lastRead: Date(timeIntervalSince1970: 1))
         let new = entry("b", title: "B", lastRead: Date(timeIntervalSince1970: 100))

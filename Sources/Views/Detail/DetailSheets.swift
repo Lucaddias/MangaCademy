@@ -377,14 +377,26 @@ struct CoverSheet: View {
 /// Resultados da busca unificada (gênero, autor ou título tocados no detalhe).
 struct SearchResultsView: View {
     let query: String
+    /// Busca por tag: obras populares que têm a tag (e as outras que o usuário marcar).
+    var isTag = false
     @AppStorage(Preferences.Key.languageFilter) private var filterRaw: String = Preferences.Default.languageFilter.rawValue
     @AppStorage(Preferences.Key.showNsfwSources) private var showNsfw = Preferences.Default.showNsfwSources
     @State private var feed = CatalogFeed()
 
     private var filter: LanguageFilter { LanguageFilter(rawValue: filterRaw) ?? .portuguese }
 
+    private var title: String {
+        guard isTag else { return query }
+        let key = GenreTags.key(for: query)
+        return key.hasPrefix("~") ? query : GenreTags.label(for: key)
+    }
+
     var body: some View {
         ScrollView {
+            if isTag {
+                TagChipsBar(tags: feed.availableTags, selection: Binding(get: { feed.tagFilter }, set: { feed.setTagFilter($0) }))
+                    .padding(.top, 8)
+            }
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 105, maximum: 130), spacing: 14)], spacing: 16) {
                 ForEach(feed.works) { work in
                     NavigationLink(value: work) {
@@ -396,20 +408,33 @@ struct SearchResultsView: View {
             }
             .padding()
             if feed.isExhausted {
-                Text(feed.works.isEmpty ? "Nada encontrado para “\(query)”." : "Fim dos resultados")
+                Text(feed.works.isEmpty ? (isTag ? "Nenhuma obra com essas tags." : "Nada encontrado para “\(query)”.") : "Fim dos resultados")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .padding()
             } else {
-                ProgressView()
-                    .padding()
-                    .onAppear { feed.requestMore() }
+                VStack(spacing: 6) {
+                    ProgressView()
+                    if isTag {
+                        Text("\(feed.works.count) de \(feed.loadedCount) obras verificadas têm as tags")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding()
+                .onAppear { feed.requestMore() }
             }
         }
-        .navigationTitle(query)
+        .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            if feed.totalSources == 0 { feed.reset(filter: filter, mode: .search(query), includeNsfw: showNsfw) }
+            guard feed.totalSources == 0 else { return }
+            if isTag {
+                feed.setTagFilter([GenreTags.key(for: query)])
+                feed.reset(filter: .all, mode: .popular, includeNsfw: showNsfw)
+            } else {
+                feed.reset(filter: .all, mode: .search(query), includeNsfw: showNsfw)
+            }
         }
     }
 }

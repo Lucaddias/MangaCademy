@@ -14,6 +14,8 @@ public struct MangaGridItem: View {
     var isSelected = false
     var inLibrary = false
     var onContinue: (() -> Void)?
+    /// Linha extra embaixo do título (ex.: último capítulo em "Recentes").
+    var caption: String?
 
     public init(
         title: String,
@@ -73,6 +75,12 @@ public struct MangaGridItem: View {
         return copy
     }
 
+    func caption(_ text: String?) -> MangaGridItem {
+        var copy = self
+        copy.caption = text
+        return copy
+    }
+
     public var body: some View {
         Group {
             if displayMode == .list {
@@ -109,6 +117,12 @@ public struct MangaGridItem: View {
                     Text(languageText)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                }
+                if let caption {
+                    Text(caption)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
             }
             Spacer()
@@ -241,6 +255,13 @@ public struct MangaGridItem: View {
                     .fontWeight(.medium)
                     .lineLimit(2, reservesSpace: true)
                     .foregroundStyle(.primary)
+            }
+
+            if let caption {
+                Text(caption)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
 
             if let badge = badgeText, !badge.isEmpty {

@@ -160,6 +160,8 @@ public struct MangaDetailView: View {
     @State private var downloadVersion = 0
     @State private var webTarget: WebTarget?
     @State private var showTracking = false
+    /// "Marcar todos como lidos" (true) ou "Desmarcar todos" (false) esperando confirmação.
+    @State private var bulkRead: Bool?
 
     private let mangaId: String
 
@@ -301,7 +303,7 @@ public struct MangaDetailView: View {
             CategoryPickerSheet(mangas: categoryTargets)
         }
         .navigationDestination(item: $searchQuery) { request in
-            SearchResultsView(query: request.query)
+            SearchResultsView(query: request.query, isTag: request.isTag)
         }
         .confirmationDialog("Remover da biblioteca?", isPresented: $confirmRemoval, titleVisibility: .visible) {
             Button("Remover", role: .destructive) {
@@ -310,6 +312,19 @@ public struct MangaDetailView: View {
             }
         } message: {
             Text("O progresso de leitura continua salvo.")
+        }
+        .confirmationDialog(
+            bulkRead == true ? "Marcar os \(visibleChapters.count) capítulos como lidos?" : "Desmarcar os \(visibleChapters.count) capítulos?",
+            isPresented: Binding(get: { bulkRead != nil }, set: { if !$0 { bulkRead = nil } }),
+            titleVisibility: .visible,
+            presenting: bulkRead
+        ) { read in
+            Button(read ? "Marcar como lidos" : "Desmarcar", role: read ? nil : .destructive) {
+                ChapterStore.setRead(read, chapters: visibleChapters, mangaId: progressId, context: modelContext)
+            }
+            Button("Cancelar", role: .cancel) {}
+        } message: { read in
+            Text(read ? "Vale para os capítulos que aparecem na lista." : "O progresso de leitura destes capítulos será perdido.")
         }
         .confirmationDialog(
             "Parece que esta obra já está na biblioteca",
@@ -354,7 +369,7 @@ public struct MangaDetailView: View {
                 }
             }
             ToolbarItemGroup(placement: .bottomBar) {
-                Button { applyToSelection { ChapterStore.setRead(true, chapter: $0, mangaId: progressId, context: modelContext) } } label: {
+                Button { markSelection(read: true) } label: {
                     Image(systemName: "checkmark.circle")
                 }
                 .accessibilityLabel("Marcar como lidos")
@@ -376,7 +391,7 @@ public struct MangaDetailView: View {
                 }
                 .accessibilityLabel("Apagar downloads")
                 Spacer()
-                Button { applyToSelection { ChapterStore.setRead(false, chapter: $0, mangaId: progressId, context: modelContext) } } label: {
+                Button { markSelection(read: false) } label: {
                     Image(systemName: "circle")
                 }
                 .accessibilityLabel("Marcar como não lidos")
@@ -547,7 +562,7 @@ public struct MangaDetailView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(genres, id: \.self) { genre in
-                        Button { searchQuery = SearchRequest(query: genre) } label: {
+                        Button { searchQuery = SearchRequest(query: genre, isTag: true) } label: {
                             BadgeView(genre, color: .secondary)
                         }
                         .buttonStyle(.plain)
@@ -731,6 +746,28 @@ public struct MangaDetailView: View {
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
+            if !chapters.isEmpty {
+                let readCount = chapters.filter(progress.isRead).count
+                HStack(spacing: 8) {
+                    Button { bulkRead = true } label: {
+                        // "Marcar todos como lidos" não cabe ao lado de "Desmarcar todos" no iPhone
+                        Label("Marcar todos", systemImage: "checkmark.circle")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .accessibilityLabel("Marcar todos como lidos")
+                    .disabled(readCount == chapters.count)
+                    Button { bulkRead = false } label: {
+                        Label("Desmarcar todos", systemImage: "circle")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .accessibilityLabel("Desmarcar todos os capítulos")
+                    .disabled(readCount == 0)
+                }
+                .font(.footnote.weight(.medium))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .buttonStyle(.bordered)
+            }
         }
         .padding(.horizontal)
         .listRowSeparator(.hidden)
@@ -904,6 +941,11 @@ public struct MangaDetailView: View {
         selected = []
     }
 
+    private func markSelection(read: Bool) {
+        ChapterStore.setRead(read, chapters: model.chapters.filter { selected.contains($0.id) }, mangaId: progressId, context: modelContext)
+        selected = []
+    }
+
     private func chapterSubtitle(_ ch: SourceChapterItem, pageInProgress: Int?) -> String {
         var parts: [String] = []
         if let pageInProgress { parts.append("Página \(pageInProgress)") }
@@ -1063,5 +1105,6 @@ public struct MangaDetailView: View {
 /// Busca aberta a partir de gênero, autor ou título.
 struct SearchRequest: Hashable, Identifiable {
     let query: String
-    var id: String { query }
+    var isTag = false
+    var id: String { (isTag ? "tag:" : "") + query }
 }

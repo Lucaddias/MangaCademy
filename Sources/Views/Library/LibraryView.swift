@@ -97,6 +97,7 @@ public struct LibraryView: View {
         filters.bookmarked = settings.filterBookmarked
         filters.downloaded = DownloadSettings.shared.downloadedOnly ? .include : settings.filterDownloaded
         filters.tracked = settings.filterTracked
+        filters.tags = settings.filterTags
         return LibraryQuery.apply(entries, filters: filters, search: searchText, sort: settings.sort, ascending: settings.ascending, seed: settings.randomSeed)
             .compactMap { byId[$0.id] }
     }
@@ -132,7 +133,7 @@ public struct LibraryView: View {
             .searchable(text: $searchText, prompt: "Título, autor:, genero:, src:")
             .toolbar { toolbar }
             .sheet(isPresented: $showSettings) {
-                LibrarySettingsSheet(settings: settings)
+                LibrarySettingsSheet(settings: settings, tags: GenreTags.counts(favoriteMangas.map(\.genres)))
             }
             .sheet(isPresented: Binding(get: { !categoryTargets.isEmpty }, set: { if !$0 { categoryTargets = [] } })) {
                 CategoryPickerSheet(mangas: categoryTargets)

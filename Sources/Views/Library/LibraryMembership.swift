@@ -52,6 +52,8 @@ struct CatalogCell: View {
     let work: UnifiedWork
     let filter: LanguageFilter
     let index: LibraryIndex
+    /// Mostra o último capítulo e quando saiu (em "Recentes").
+    var showsLatestChapter = false
 
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \MangaCategory.order) private var categories: [MangaCategory]
@@ -59,7 +61,9 @@ struct CatalogCell: View {
     var body: some View {
         let manga = index.manga(for: work)
         NavigationLink(value: work) {
-            MangaGridItem(work: work, filter: filter).markedInLibrary(manga != nil)
+            MangaGridItem(work: work, filter: filter)
+                .markedInLibrary(manga != nil)
+                .caption(showsLatestChapter ? work.latestChapterCaption() : nil)
         }
         .buttonStyle(.plain)
         .contextMenu {

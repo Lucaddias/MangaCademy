@@ -100,6 +100,29 @@ struct ChapterStoreTests {
         #expect(!after.isRead(chapter(1, source: "b")))
     }
 
+    @Test func markAllReadCreatesMissingRecords() {
+        let manga = libraryManga(favoriteAt: .distantPast)
+        manga.unreadCount = 3
+        let list = [chapter(3), chapter(2), chapter(1)]
+        ChapterStore.setRead(true, chapters: list, mangaId: manga.id, context: context)
+
+        let progress = ChapterProgress(records: records(manga), mangaId: manga.id)
+        #expect(list.allSatisfy(progress.isRead))
+        #expect(manga.unreadCount == 0)
+    }
+
+    @Test func unmarkAllClearsOtherSourcesToo() {
+        let manga = libraryManga(favoriteAt: .distantPast)
+        ChapterStore.setRead(true, chapters: [chapter(2, source: "b"), chapter(1, source: "b")], mangaId: manga.id, context: context)
+        ChapterStore.setRead(false, chapters: [chapter(2, source: "a"), chapter(1, source: "a")], mangaId: manga.id, context: context)
+
+        let progress = ChapterProgress(records: records(manga), mangaId: manga.id)
+        #expect(!progress.isRead(chapter(2, source: "b")))
+        #expect(!progress.isRead(chapter(1, source: "b")))
+        // Desmarcar não cria registros para capítulos que nunca foram lidos
+        #expect(records(manga).allSatisfy { $0.sourceId == "b" })
+    }
+
     @Test func bookmarkAndPageProgress() {
         let manga = libraryManga(favoriteAt: .distantPast)
         ChapterStore.setBookmarked(true, chapter: chapter(1), mangaId: manga.id, context: context)

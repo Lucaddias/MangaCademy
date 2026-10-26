@@ -35,7 +35,10 @@ public final class MangaThemesiaSource: ThemeSource, MangaSource {
             guard seen.insert(path).inserted else { return nil }
             let title = link.attr("title")?.nilIfEmpty ?? card.first(".//div[\(cls("tt"))]")?.text ?? link.text
             guard !title.isEmpty else { return nil }
-            return item(remoteUrl: path, title: title, cover: card.first(".//img")?.imageURL)
+            var result = item(remoteUrl: path, title: title, cover: card.first(".//img")?.imageURL)
+            // O tema mostra o último capítulo, mas sem data
+            result.latestChapterName = card.first(".//*[\(cls("epxs"))]")?.text.nilIfEmpty
+            return result
         }
         let hasNextLink = doc.first("//div[\(cls("pagination"))]//a[\(cls("next"))] | //div[\(cls("hpage"))]//a[\(cls("r"))]") != nil
         return SourceMangaPage(items: items, hasNextPage: hasNextLink || !items.isEmpty)

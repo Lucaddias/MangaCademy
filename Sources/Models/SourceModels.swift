@@ -15,6 +15,9 @@ public struct SourceMangaItem: Identifiable, Hashable {
     public var genres: [String]
     /// A listagem já trouxe títulos alternativos e tags (não precisa abrir a página da obra).
     public var hasFullMetadata: Bool
+    /// Capítulo mais novo, quando a listagem informa (usado em "Recentes").
+    public var latestChapterName: String?
+    public var latestChapterDate: Date?
 
     public init(
         sourceId: String,
@@ -25,7 +28,9 @@ public struct SourceMangaItem: Identifiable, Hashable {
         languages: [String] = [],
         altTitles: [String] = [],
         genres: [String] = [],
-        hasFullMetadata: Bool = false
+        hasFullMetadata: Bool = false,
+        latestChapterName: String? = nil,
+        latestChapterDate: Date? = nil
     ) {
         self.id = "\(sourceId):\(remoteUrl)"
         self.sourceId = sourceId
@@ -37,6 +42,8 @@ public struct SourceMangaItem: Identifiable, Hashable {
         self.altTitles = altTitles
         self.genres = genres
         self.hasFullMetadata = hasFullMetadata
+        self.latestChapterName = latestChapterName
+        self.latestChapterDate = latestChapterDate
     }
 }
 

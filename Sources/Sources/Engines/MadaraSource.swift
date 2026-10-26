@@ -98,8 +98,26 @@ public final class MadaraSource: ThemeSource, MangaSource {
             guard seen.insert(path).inserted else { return nil }
             let title = link.text
             guard !title.isEmpty else { return nil }
-            return item(remoteUrl: path, title: title, cover: card.first(".//img")?.imageURL)
+            var result = item(remoteUrl: path, title: title, cover: card.first(".//img")?.imageURL)
+            // O card traz os dois últimos capítulos; o primeiro é o mais novo
+            if let latest = card.first(".//div[\(cls("chapter-item"))]") {
+                result.latestChapterName = latest.first(".//span[\(cls("chapter"))]//a | .//a")?.text.nilIfEmpty
+                result.latestChapterDate = date(in: latest)
+            }
+            return result
         }
+    }
+
+    /// Data de um capítulo como o tema mostra: capítulos novos trazem a data relativa no `alt` do
+    /// selo "novo" ou no `title` do link, os demais como texto em `.post-on`/`.chapter-release-date`.
+    private func date(in element: HTMLElement) -> Date? {
+        let dateSpan = ".//span[\(cls("post-on")) or \(cls("chapter-release-date"))]"
+        let candidates = [
+            element.first(".//img[not(\(cls("thumb")))]")?.attr("alt"),
+            element.first("\(dateSpan)//a")?.attr("title"),
+            element.first(dateSpan)?.text,
+        ]
+        return candidates.lazy.compactMap { ChapterDateParser.parse($0, language: self.language) }.first
     }
 
     private func hasNextPageLink(_ doc: HTMLDocument) -> Bool {
@@ -229,7 +247,7 @@ public final class MadaraSource: ThemeSource, MangaSource {
         doc.select("//li[\(cls("wp-manga-chapter"))]").enumerated().compactMap { index, li in
             guard let link = li.first(".//a[@href]"), let href = link.absAttr("href") else { return nil }
             let name = link.text.isEmpty ? (li.first(".//*[\(cls("chapter-manhwa-title"))]")?.text ?? "") : link.text
-            return chapter(remoteUrl: storedPath(href), name: name, index: offset + index)
+            return chapter(remoteUrl: storedPath(href), name: name, index: offset + index, date: date(in: li))
         }
     }
 

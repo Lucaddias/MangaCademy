@@ -31,9 +31,22 @@ public struct KeiyoushiEngineConfig: Hashable, Codable {
     // ZeistManga
     public var mangaCategory: String?
     public var chapterCategory: String?
-    // Iken
+    // Iken, PizzaReader
     public var apiUrl: String?
     public var perPage: Int?
+    // MangaCatalog: séries do site, pares [nome, caminho]
+    public var series: [[String]]?
+    // Yiimanga, MMRCMS
+    public var searchParam: String?
+    public var popularPath: String?
+    // MangaHub: acervo do site na API ("m01", "mf01"...)
+    public var mangaSource: String?
+    // FoolSlide
+    public var urlModifier: String?
+    // MMRCMS
+    public var itemPath: String?
+    public var dateFormat: String?
+    public var chapterNamePrefix: String?
 }
 
 public struct KeiyoushiExtensionItem: Identifiable, Hashable, Codable {

@@ -180,6 +180,8 @@ struct CategoryPickerSheet: View {
 /// Folha "Filtrar · Ordenar · Exibição" da biblioteca.
 struct LibrarySettingsSheet: View {
     @Bindable var settings: LibrarySettings
+    /// Tags das obras da biblioteca, com quantas obras têm cada uma.
+    var tags: [GenreTags.Count] = []
     @State private var tab = 0
 
     var body: some View {
@@ -204,6 +206,19 @@ struct LibrarySettingsSheet: View {
                         triRow("Rastreados", $settings.filterTracked)
                     } footer: {
                         Text("Toque para alternar: incluir ✓, excluir ✕ ou ignorar.")
+                    }
+                    Section {
+                        NavigationLink {
+                            TagPickerList(
+                                tags: tags,
+                                selection: $settings.filterTags,
+                                footer: "Aparecem só as obras da biblioteca com todas as tags marcadas."
+                            )
+                        } label: {
+                            LabeledContent("Tags", value: settings.filterTags.isEmpty
+                                ? "Todas"
+                                : settings.filterTags.map(GenreTags.label(for:)).sorted().joined(separator: ", "))
+                        }
                     }
                 case 1:
                     Section {

@@ -28,12 +28,23 @@ SOURCE_REPO = "https://github.com/keiyoushi/extensions-source.git"
 PKG_PREFIX = "eu.kanade.tachiyomi.extension."
 
 # Temas com motor Swift implementado no app
-SUPPORTED_THEMES = {"madara", "mangathemesia", "zeistmanga", "keyoapp", "iken"}
+SUPPORTED_THEMES = {
+    "madara", "mangathemesia", "zeistmanga", "keyoapp", "iken",
+    "pizzareader", "mangacatalog", "yiimanga", "mangahub", "foolslide", "guya", "mmrcms",
+}
+# Extensões de um tema suportado que reescrevem quase tudo (o motor do tema não serve)
+CUSTOM_OVERRIDES = {"en.readcomicsonline", "es.mangasin"}
 # Extensões próprias (sem tema) com motor Swift dedicado
 CUSTOM_ENGINES = {
     "all.mangadex": "mangadex",
     "all.comicklive": "comick",
     "pt.spectralscan": "nexustoons",  # "Nexus Toons" (nexustoons.com)
+    # Multi-idioma: cada idioma do índice vira uma fonte própria no app
+    "all.webtoons": "webtoons",
+    "all.namicomi": "namicomi",
+    "all.globalcomix": "globalcomix",
+    "all.mangaball": "mangaball",
+    "all.comicfury": "comicfury",
 }
 
 
@@ -95,7 +106,7 @@ def engine_for(key, gradle, code):
         return {"type": CUSTOM_ENGINES[key]}
     m = re.search(r"\btheme\s*=\s*\"([^\"]+)\"", gradle) or re.search(r"themePkg\s*=\s*['\"]([^'\"]+)", gradle)
     theme = m.group(1) if m else None
-    if theme not in SUPPORTED_THEMES:
+    if theme not in SUPPORTED_THEMES or key in CUSTOM_OVERRIDES:
         return None
     engine = {"type": theme}
     if theme == "madara":
@@ -125,7 +136,7 @@ def engine_for(key, gradle, code):
                 engine[prop] = v
     elif theme == "keyoapp":
         if re.search(r":\s*KeyoappV2\b", code):
-            return None  # API diferente, ainda não suportada
+            engine["type"] = "keyoappv2"
     elif theme == "iken":
         v = str_override(code, "apiUrl")
         if v:
@@ -133,7 +144,41 @@ def engine_for(key, gradle, code):
         v = int_override(code, "perPage")
         if v:
             engine["perPage"] = v
+    elif theme == "mangacatalog":
+        engine["series"] = series_pairs(code)
+    elif theme == "yiimanga":
+        for prop in ("searchParam", "popularPath"):
+            v = str_override(code, prop)
+            if v:
+                engine[prop] = v
+    elif theme == "mangahub":
+        v = str_override(code, "mangaSource")
+        if v:
+            engine["mangaSource"] = v
+    elif theme == "foolslide":
+        v = str_override(code, "urlModifier")
+        if v:
+            engine["urlModifier"] = v
+    elif theme == "mmrcms":
+        for prop in ("itemPath", "chapterNamePrefix"):
+            v = str_override(code, prop)
+            if v is not None:
+                engine[prop] = v
+        m = re.search(r"override\s+val\s+dateFormat[^=]*=\s*DateTimeFormatter\.ofPattern\(\"([^\"]+)\"", code)
+        if m:
+            engine["dateFormat"] = m.group(1)
+        # popularMangaUrl fixo (sem paginação), ex.: "$baseUrl/manga-list"
+        m = re.search(r"popularMangaUrl\(page: Int\)\s*=\s*\"\$baseUrl/([^\"$?]+)\"", code)
+        if m:
+            engine["popularPath"] = m.group(1)
     return engine
+
+
+def series_pairs(code):
+    """Séries do sourceList do MangaCatalog: Pair("Nome", "$baseUrl/manga/slug/") fora de comentários."""
+    lines = [line for line in code.splitlines() if not line.strip().startswith("//")]
+    return [[name, path] for name, path in
+            re.findall(r"Pair\(\s*\"([^\"]+)\"\s*,\s*\"\$baseUrl(/[^\"]*)\"\s*\)", "\n".join(lines))]
 
 
 def main():

@@ -35,8 +35,55 @@ public final class MangaDexSource: LanguageScopedSource {
         try await list(page: page, extra: [("order[followedCount]", "desc")])
     }
 
+    /// Como no Mihon: os capítulos mais novos no idioma do filtro (e não o último capítulo em
+    /// qualquer idioma), uma obra por vez, na ordem em que saíram.
     public func fetchLatest(page: Int) async throws -> SourceMangaPage {
-        try await list(page: page, extra: [("order[latestUploadedChapter]", "desc")])
+        let limit = 100
+        let offset = (page - 1) * limit
+        guard offset + limit <= 10_000 else { return .empty }
+        var params: [(String, String)] = [
+            ("limit", "\(limit)"),
+            ("offset", "\(offset)"),
+            ("order[readableAt]", "desc"),
+            ("includeFutureUpdates", "0"),
+            ("includeExternalUrl", "0"),
+            ("includeEmptyPages", "0"),
+        ]
+        params += contentRatings.map { ("contentRating[]", $0) }
+        params += languageFilter.mangaDexLanguages.map { ("translatedLanguage[]", $0) }
+        guard let root = try await http.json(url("/chapter", params), userAgent: userAgent) as? [String: Any] else { return .empty }
+
+        var order: [String] = []
+        var newest: [String: (name: String, date: Date?)] = [:]
+        for chapter in root.array("data") {
+            guard let mangaId = chapter.array("relationships").first(where: { $0.string("type") == "manga" })?.string("id"),
+                  newest[mangaId] == nil else { continue }
+            let attrs = chapter.dict("attributes") ?? [:]
+            order.append(mangaId)
+            newest[mangaId] = (
+                attrs.string("chapter").map { "Cap. \($0)" } ?? attrs.string("title")?.nilIfEmpty ?? "Oneshot",
+                attrs.string("readableAt").flatMap(DateParsing.iso)
+            )
+        }
+        let total = root.int("total") ?? 0
+        let hasNext = offset + limit < min(total, 10_000)
+        guard !order.isEmpty else { return SourceMangaPage(items: [], hasNextPage: hasNext) }
+
+        var mangaParams: [(String, String)] = [("limit", "\(order.count)"), ("includes[]", "cover_art")]
+        mangaParams += order.map { ("ids[]", $0) }
+        mangaParams += contentRatings.map { ("contentRating[]", $0) }
+        guard let mangaRoot = try await http.json(url("/manga", mangaParams), userAgent: userAgent) as? [String: Any] else { return .empty }
+        let byId = Dictionary(
+            mangaRoot.array("data").compactMap { manga in manga.string("id").map { ($0, manga) } },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let items: [SourceMangaItem] = order.compactMap { mangaId in
+            guard let manga = byId[mangaId], var item = makeItem(manga) else { return nil }
+            item.latestChapterName = newest[mangaId]?.name
+            item.latestChapterDate = newest[mangaId]?.date
+            return item
+        }
+        return SourceMangaPage(items: items, hasNextPage: hasNext)
     }
 
     public func search(query: String, page: Int) async throws -> SourceMangaPage {

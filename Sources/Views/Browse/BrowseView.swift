@@ -1,14 +1,13 @@
 import SwiftUI
 import SwiftData
 
-/// Catálogo unificado de todas as fontes Keiyoushi com motor iOS.
-/// O filtro de idioma substitui o antigo seletor "Fontes / Extensões".
+/// Catálogo unificado de todas as fontes Keiyoushi com motor iOS, em todos os idiomas.
+/// O idioma preferido (Ajustes) só decide a ordem dos selos de idioma; a lista de fontes fica em Ajustes › Fontes.
 public struct BrowseView: View {
     @AppStorage(Preferences.Key.languageFilter) private var filterRaw: String = Preferences.Default.languageFilter.rawValue
     @AppStorage(Preferences.Key.showNsfwSources) private var showNsfw = Preferences.Default.showNsfwSources
     @AppStorage(Preferences.Key.blockAdultTags) private var blockAdult = Preferences.Default.blockAdultTags
 
-    @AppStorage("catalog_browse_section") private var section = "catalog"
     @Query(filter: #Predicate<Manga> { $0.isFavorite == true }) private var favorites: [Manga]
     @State private var sourceSettings = SourceSettings.shared
     @State private var feed = CatalogFeed()
@@ -26,7 +25,8 @@ public struct BrowseView: View {
         GridItem(.adaptive(minimum: 105, maximum: 130), spacing: 14)
     ]
 
-    private var filter: LanguageFilter {
+    /// Idioma preferido: vem primeiro nos selos de cada obra.
+    private var preferred: LanguageFilter {
         LanguageFilter(rawValue: filterRaw) ?? .portuguese
     }
 
@@ -34,39 +34,20 @@ public struct BrowseView: View {
 
     public var body: some View {
         NavigationStack {
-            Group {
-                if section == "sources" {
-                    SourcesListView()
-                } else {
-                    catalog
+            catalog
+                .navigationTitle("Explorar")
+                .navigationBarTitleDisplayMode(.inline)
+                .navigationDestination(for: UnifiedWork.self) { work in
+                    MangaDetailView(work: work)
                 }
-            }
-            .navigationTitle("Explorar")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Picker("Explorar", selection: $section) {
-                        Text("Catálogo").tag("catalog")
-                        Text("Fontes").tag("sources")
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 210)
-                }
-            }
-            .navigationDestination(for: UnifiedWork.self) { work in
-                MangaDetailView(work: work)
-            }
-            .navigationDestination(for: SourceRoute.self) { route in
-                if let source = SourceManager.shared.getSource(id: route.id) {
-                    SourceBrowseView(source: source)
-                }
-            }
         }
     }
 
     private var catalog: some View {
             VStack(spacing: 0) {
                 filterBar
+                TagChipsBar(tags: feed.availableTags, selection: tagSelection)
+                    .padding(.bottom, 8)
                 content
             }
             .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Buscar em todas as fontes")
@@ -81,7 +62,6 @@ public struct BrowseView: View {
                     reload()
                 }
             }
-            .onChange(of: filterRaw) { _, _ in reload() }
             .onChange(of: sort) { _, _ in reload() }
             .onChange(of: showNsfw) { _, _ in reload() }
             .onChange(of: blockAdult) { _, _ in reload() }
@@ -94,40 +74,35 @@ public struct BrowseView: View {
 
     // MARK: - Filtros
 
+    /// O idioma do catálogo fica em Ajustes; aqui só a ordem (ou a busca ativa).
     private var filterBar: some View {
-        VStack(spacing: 8) {
-            Picker("Idioma", selection: $filterRaw) {
-                ForEach(LanguageFilter.allCases) { option in
-                    Text(option.title).tag(option.rawValue)
-                }
-            }
-            .pickerStyle(.segmented)
-
-            HStack(spacing: 10) {
-                if let activeQuery {
-                    Label("“\(activeQuery)”", systemImage: "magnifyingglass")
-                        .font(.footnote.weight(.semibold))
-                        .lineLimit(1)
-                } else {
-                    Picker("Ordem", selection: $sort) {
-                        ForEach(BrowseSort.allCases) { option in
-                            Text(option.rawValue).tag(option)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(maxWidth: 220)
-                }
-                Spacer(minLength: 4)
-                Text("\(feed.works.count) obras · \(feed.totalSources) fontes")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
+        HStack(spacing: 10) {
+            if let activeQuery {
+                Label("“\(activeQuery)”", systemImage: "magnifyingglass")
+                    .font(.footnote.weight(.semibold))
                     .lineLimit(1)
+            } else {
+                Picker("Ordem", selection: $sort) {
+                    ForEach(BrowseSort.allCases) { option in
+                        Text(option.rawValue).tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 220)
             }
+            Spacer(minLength: 0)
         }
         .padding(.horizontal)
         .padding(.top, 6)
         .padding(.bottom, 8)
+    }
+
+    private var tagSelection: Binding<Set<String>> {
+        Binding(get: { feed.tagFilter }, set: { feed.setTagFilter($0) })
+    }
+
+    private var tagNames: String {
+        feed.tagFilter.map(GenreTags.label(for:)).sorted().joined(separator: " + ")
     }
 
     // MARK: - Conteúdo
@@ -141,7 +116,9 @@ public struct BrowseView: View {
                 VStack(spacing: 12) {
                     Spacer()
                     ProgressView()
-                    Text(activeQuery == nil
+                    Text(!feed.tagFilter.isEmpty
+                         ? "Procurando obras com \(tagNames)… \(feed.loadedCount) obras verificadas"
+                         : activeQuery == nil
                          ? "Carregando obras de \(feed.totalSources) fontes Keiyoushi…"
                          : "Buscando em \(feed.totalSources) fontes…")
                         .font(.subheadline)
@@ -167,8 +144,8 @@ public struct BrowseView: View {
                 LazyVGrid(columns: columns, spacing: 16) {
                     let index = LibraryIndex(favorites)
                     ForEach(feed.works) { work in
-                        CatalogCell(work: work, filter: filter, index: index)
-                        .onAppear { feed.onAppear(of: work) }
+                        CatalogCell(work: work, filter: preferred, index: index, showsLatestChapter: feed.mode == .latest)
+                            .onAppear { feed.onAppear(of: work) }
                     }
                 }
                 .padding()
@@ -230,7 +207,23 @@ public struct BrowseView: View {
         }
     }
 
+    @ViewBuilder
     private var emptyState: some View {
+        if !feed.tagFilter.isEmpty {
+            ContentUnavailableView {
+                Label("Nenhuma obra com essas tags", systemImage: "tag.slash")
+            } description: {
+                Text("Nenhuma das \(feed.loadedCount) obras de \(feed.totalSources) fontes tem \(tagNames).")
+            } actions: {
+                Button("Limpar tags") { feed.setTagFilter([]) }
+                    .buttonStyle(.borderedProminent)
+            }
+        } else {
+            sourcesEmptyState
+        }
+    }
+
+    private var sourcesEmptyState: some View {
         VStack(spacing: 12) {
             Spacer()
             Image(systemName: activeQuery == nil ? "wifi.exclamationmark" : "magnifyingglass")
@@ -240,7 +233,7 @@ public struct BrowseView: View {
                 .font(.headline)
             Text(activeQuery == nil
                  ? "Verifique sua conexão. \(feed.failedSources) de \(feed.totalSources) fontes falharam."
-                 : "Nenhuma das \(feed.totalSources) fontes (\(filter.title)) tem resultados para “\(activeQuery ?? "")”.")
+                 : "Nenhuma das \(feed.totalSources) fontes tem resultados para “\(activeQuery ?? "")”.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -260,6 +253,6 @@ public struct BrowseView: View {
         } else {
             mode = sort == .popular ? .popular : .latest
         }
-        feed.reset(filter: filter, mode: mode, includeNsfw: showNsfw)
+        feed.reset(filter: .all, mode: mode, includeNsfw: showNsfw)
     }
 }

@@ -8,6 +8,9 @@ import Observation
 /// Antes de aparecer, cada obra nova é verificada: títulos alternativos e tags (página da obra,
 /// quando a listagem não traz) e a impressão digital da capa. Assim a mesma obra com título
 /// traduzido entra unificada desde o início, e obras com tag adulta são escondidas.
+///
+/// Em "Recentes" a ordem é a do capítulo mais novo entre todas as fontes: a primeira página de
+/// cada fonte é pedida logo de início e as listas são juntadas por data (`LatestMerge`).
 @MainActor
 @Observable
 public final class CatalogFeed {
@@ -32,6 +35,12 @@ public final class CatalogFeed {
     public private(set) var blockedCount = 0
     public private(set) var mode: Mode = .popular
     public private(set) var filter: LanguageFilter = .all
+    /// Tags escolhidas (chaves de `GenreTags`): só aparecem obras com todas elas.
+    public private(set) var tagFilter: Set<String> = []
+    /// Tags das obras já carregadas, das mais comuns para as menos comuns.
+    public private(set) var availableTags: [GenreTags.Count] = []
+    /// Obras carregadas antes do filtro de tags.
+    public private(set) var loadedCount = 0
 
     public var isLoading: Bool { inFlight > 0 || verifyingCount > 0 }
     /// Diagnóstico: motivo de cada fusão sem título idêntico, por referência.
@@ -64,6 +73,17 @@ public final class CatalogFeed {
     private var includeNsfw = false
     private var blockAdult = true
 
+    // MARK: Recentes
+
+    private var latestMerge = LatestMerge()
+    /// Fontes com mais páginas esperando a vez (só pedem a próxima quando ela pode ter algo mais novo).
+    private var idleLatest: [String: Cursor] = [:]
+    private var sourcesById: [String: MangaSource] = [:]
+    /// Data usada na ordem de cada referência mostrada (obra unificada = a mais nova delas).
+    private var latestSortDate: [String: Date] = [:]
+    /// Item mais antigo já mostrado: o que chegar mais novo que ele entra na lista na hora.
+    private var oldestShown: Date?
+
     // MARK: Verificação
 
     private var pending: [Pending] = []
@@ -80,6 +100,7 @@ public final class CatalogFeed {
     private let pageStep = 45
     private let prefetchDistance = 15
     private let maxConcurrent = 8
+    private let maxConcurrentLatest = 12
     private let maxSearchPagesPerSource = 3
     private let maxEnrich = 16
     private let maxEnrichPerSource = 4
@@ -111,8 +132,16 @@ public final class CatalogFeed {
         enrichBySource = [:]
         publishScheduled = false
         targetCount = initialTarget
+        latestMerge = LatestMerge()
+        idleLatest = [:]
+        latestSortDate = [:]
+        oldestShown = nil
+        availableTags = []
+        loadedCount = 0
+        matchingCount = 0
 
         let sources = SourceHealth.prioritized(SourceManager.shared.catalogSources(for: filter, includeNsfw: includeNsfw))
+        sourcesById = Dictionary(sources.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         queue = sources.map(Cursor.init)
         queueHead = 0
         totalSources = queue.count
@@ -134,6 +163,15 @@ public final class CatalogFeed {
         pump()
     }
 
+    /// Troca as tags sem recarregar: filtra o que já veio e busca mais até ter obras suficientes.
+    public func setTagFilter(_ tags: Set<String>) {
+        guard tags != tagFilter else { return }
+        tagFilter = tags
+        targetCount = initialTarget
+        publish()
+        pump()
+    }
+
     public func retry() {
         reset(filter: filter, mode: mode, includeNsfw: includeNsfw)
     }
@@ -143,11 +181,21 @@ public final class CatalogFeed {
     private var pendingCount: Int { queue.count - queueHead }
     private var unverifiedCount: Int { pending.count + enrichInFlight + waitingCount }
     /// Obras que já aparecem (ou vão aparecer na próxima publicação).
-    private var visibleCount: Int { merger.works.count - (blockAdult ? merger.adultCount : 0) }
+    /// Com tags escolhidas, só as que têm as tags (contadas na última publicação).
+    private var visibleCount: Int {
+        tagFilter.isEmpty ? merger.works.count - (blockAdult ? merger.adultCount : 0) : matchingCount
+    }
+    private var matchingCount = 0
+
+    private var needsMore: Bool { visibleCount + unverifiedCount < targetCount }
 
     private func pump() {
+        if mode == .latest {
+            pumpLatest()
+            return
+        }
         // Itens ainda em verificação contam para a meta: evita baixar páginas demais de uma vez
-        while inFlight < maxConcurrent, visibleCount + unverifiedCount < targetCount, let cursor = dequeue() {
+        while inFlight < maxConcurrent, needsMore, let cursor = dequeue() {
             launch(cursor)
         }
         verifyingCount = unverifiedCount
@@ -166,6 +214,51 @@ public final class CatalogFeed {
             queueHead = 0
         }
         return cursor
+    }
+
+    /// "Recentes": primeira página de todas as fontes, depois só o que pode ser mais novo.
+    private func pumpLatest() {
+        while inFlight < maxConcurrentLatest, let cursor = dequeue() {
+            launch(cursor)
+        }
+        drainLatest()
+        pumpEnrichment()
+        while inFlight < maxConcurrentLatest, let id = nextLatestSource(), let cursor = idleLatest.removeValue(forKey: id) {
+            launch(cursor)
+        }
+        verifyingCount = unverifiedCount
+        if inFlight == 0 && pendingCount == 0 && idleLatest.isEmpty && latestMerge.buffer.isEmpty && unverifiedCount == 0 {
+            isExhausted = true
+        }
+    }
+
+    /// Mostra os itens seguros: até a meta e, depois dela, os mais novos que algo já mostrado.
+    private func drainLatest() {
+        while true {
+            let next: LatestMerge.Entry?
+            if needsMore {
+                next = latestMerge.popSafe()
+            } else if let oldestShown {
+                next = latestMerge.popSafe(newerThan: oldestShown)
+            } else {
+                next = nil
+            }
+            guard let entry = next else { break }
+            guard let source = sourcesById[entry.sourceId] else { continue }
+            latestSortDate[entry.item.id] = entry.sortDate
+            oldestShown = min(oldestShown ?? entry.sortDate, entry.sortDate)
+            ingest(entry.item, source: source)
+        }
+    }
+
+    /// Fonte cuja próxima página deve vir agora: a que pode ter algo mais novo do que o próximo
+    /// item da fila (quando falta obra) ou do que algo já mostrado.
+    private func nextLatestSource() -> String? {
+        if needsMore {
+            return latestMerge.sourceToFetch(among: idleLatest.keys, newerThan: latestMerge.buffer.first?.sortDate)
+        }
+        guard let oldestShown else { return nil }
+        return latestMerge.sourceToFetch(among: idleLatest.keys, newerThan: oldestShown)
     }
 
     private func launch(_ cursor: Cursor) {
@@ -202,8 +295,11 @@ public final class CatalogFeed {
             if page == 1 && !fresh.isEmpty { respondingSources += 1 }
             if !fresh.isEmpty {
                 cursor.produced += fresh.count
-                for item in fresh where isRelevant(item) {
-                    ingest(item, source: cursor.source)
+                // Em "Recentes" os itens esperam a vez no merge por data
+                if mode != .latest {
+                    for item in fresh where isRelevant(item) {
+                        ingest(item, source: cursor.source)
+                    }
                 }
                 SourceHealth.recordSuccess(cursor.source.id)
             }
@@ -211,6 +307,9 @@ public final class CatalogFeed {
             keepGoing = pageResult.hasNextPage && !fresh.isEmpty
             if case .search = mode, page >= maxSearchPagesPerSource { keepGoing = false }
             cursor.nextPage = page + 1
+            if mode == .latest {
+                latestMerge.add(fresh, from: cursor.source.id, hasMore: keepGoing, keep: isRelevant)
+            }
         case .failure:
             cursor.failures += 1
             SourceHealth.recordFailure(cursor.source.id)
@@ -220,9 +319,14 @@ public final class CatalogFeed {
         }
 
         if keepGoing {
-            queue.append(cursor)
+            if mode == .latest {
+                idleLatest[cursor.source.id] = cursor
+            } else {
+                queue.append(cursor)
+            }
         } else {
             finishedSources += 1
+            if mode == .latest { latestMerge.end(cursor.source.id) }
         }
         schedulePublish()
         pumpEnrichment()
@@ -368,14 +472,29 @@ public final class CatalogFeed {
     }
 
     private func publish() {
+        var list = merger.works
         if blockAdult {
-            works = merger.adultCount == 0 ? merger.works : merger.works.filter { !$0.isAdult }
+            if merger.adultCount > 0 { list = list.filter { !$0.isAdult } }
             blockedCount = merger.adultCount
         } else {
-            works = merger.works
             blockedCount = 0
         }
+        loadedCount = list.count
+        availableTags = GenreTags.counts(list.map(\.genres))
+        if !tagFilter.isEmpty {
+            list = list.filter { GenreTags.matches($0.genres, all: tagFilter) }
+        }
+        matchingCount = list.count
+        works = mode == .latest ? sortedByLatest(list) : list
         verifyingCount = unverifiedCount
+    }
+
+    /// Do capítulo mais novo para o mais antigo (empates na ordem de chegada).
+    private func sortedByLatest(_ list: [UnifiedWork]) -> [UnifiedWork] {
+        let keys = list.map { work in work.refs.compactMap { latestSortDate[$0.id] }.max() ?? .distantPast }
+        return list.indices
+            .sorted { keys[$0] != keys[$1] ? keys[$0] > keys[$1] : $0 < $1 }
+            .map { list[$0] }
     }
 
     nonisolated private static func unique(_ values: [String]) -> [String] {

@@ -75,17 +75,29 @@ public final class ComicKSource: LanguageScopedSource {
         let rating = comic.string("content_rating") ?? "safe"
         if !includeNsfw && rating == "erotica" { return nil }
         // `chapter_latest_by_langs` (só em "Recentes") revela os idiomas disponíveis
-        let languages = (comic["chapter_latest_by_langs"] as? [String: Any])?.keys.map(LanguageCode.normalize) ?? []
+        let latestByLang = comic["chapter_latest_by_langs"] as? [String: [String: Any]] ?? [:]
+        let languages = latestByLang.keys.map(LanguageCode.normalize)
         if languageFilter == .english, !languages.isEmpty, !languages.contains(where: { LanguageCode.base($0) == "en" }) {
             return nil
         }
+        // Último capítulo nos idiomas do filtro
+        let newest = latestByLang
+            .filter { languageFilter.matches(LanguageCode.normalize($0.key)) }
+            .values
+            .compactMap { chapter -> (name: String?, date: Date)? in
+                guard let date = chapter.string("created_at").flatMap(DateParsing.iso) else { return nil }
+                return (chapter.string("chapter_number").map { "Cap. \($0)" }, date)
+            }
+            .max { $0.date < $1.date }
         return SourceMangaItem(
             sourceId: id,
             remoteUrl: slug,
             title: title,
             coverUrl: comic.string("default_thumbnail"),
             languages: languages.sorted(),
-            genres: rating == "erotica" ? ["Adult"] : []
+            genres: rating == "erotica" ? ["Adult"] : [],
+            latestChapterName: newest?.name,
+            latestChapterDate: newest?.date
         )
     }
 

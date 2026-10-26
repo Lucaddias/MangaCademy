@@ -20,6 +20,10 @@ enum ChapterStore {
         if let existing = record(for: chapter, mangaId: mangaId, context: context) {
             return existing
         }
+        return insertRecord(for: chapter, mangaId: mangaId, context: context)
+    }
+
+    private static func insertRecord(for chapter: SourceChapterItem, mangaId: String, context: ModelContext) -> Chapter {
         let record = Chapter(
             mangaId: mangaId,
             remoteUrl: chapter.remoteUrl,
@@ -54,6 +58,36 @@ enum ChapterStore {
         refreshUnreadCount(mangaId: mangaId, context: context)
         try? context.save()
         if read { TrackerManager.shared.chapterRead(chapter.chapterNumber, mangaId: mangaId, context: context) }
+    }
+
+    /// Marca vários capítulos de uma vez ("Marcar todos como lidos", seleção), salvando uma vez só.
+    /// Ao desmarcar, desmarca também os mesmos capítulos vindos de outras fontes.
+    static func setRead(_ read: Bool, chapters: [SourceChapterItem], mangaId: String, context: ModelContext) {
+        guard !chapters.isEmpty else { return }
+        let existing = records(mangaId: mangaId, context: context)
+        let byId = Dictionary(existing.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let now = Date()
+        for chapter in chapters {
+            let id = Chapter.storageId(mangaId: mangaId, sourceId: chapter.sourceId, remoteUrl: chapter.remoteUrl)
+            // Sem registro = nunca foi lido: não precisa criar um só para desmarcar
+            guard read || byId[id] != nil else { continue }
+            let record = byId[id] ?? insertRecord(for: chapter, mangaId: mangaId, context: context)
+            if record.isRead != read {
+                record.isRead = read
+                if read { record.lastReadDate = now }
+            }
+        }
+        if !read {
+            let keys = Set(chapters.map { progressKey($0) })
+            for other in existing where other.isRead && keys.contains(progressKey(other)) {
+                other.isRead = false
+            }
+        }
+        refreshUnreadCount(mangaId: mangaId, context: context)
+        try? context.save()
+        if read, let highest = chapters.map(\.chapterNumber).max() {
+            TrackerManager.shared.chapterRead(highest, mangaId: mangaId, context: context)
+        }
     }
 
     static func setBookmarked(_ bookmarked: Bool, chapter: SourceChapterItem, mangaId: String, context: ModelContext) {

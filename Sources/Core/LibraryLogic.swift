@@ -76,6 +76,8 @@ public final class LibrarySettings {
     public var filterBookmarked: TriState { didSet { save(filterBookmarked, "library_filter_bookmarked") } }
     public var filterDownloaded: TriState { didSet { save(filterDownloaded, "library_filter_downloaded") } }
     public var filterTracked: TriState { didSet { save(filterTracked, "library_filter_tracked") } }
+    /// Tags que a obra precisa ter (chaves de `GenreTags`).
+    public var filterTags: Set<String> { didSet { defaults.set(filterTags.sorted(), forKey: "library_filter_tags") } }
     public var sort: LibrarySort { didSet { defaults.set(sort.rawValue, forKey: "library_sort") } }
     public var ascending: Bool { didSet { defaults.set(ascending, forKey: "library_sort_ascending") } }
     public var showUnreadBadge: Bool { didSet { defaults.set(showUnreadBadge, forKey: "library_badge_unread") } }
@@ -103,6 +105,7 @@ public final class LibrarySettings {
         filterBookmarked = tri("library_filter_bookmarked")
         filterDownloaded = tri("library_filter_downloaded")
         filterTracked = tri("library_filter_tracked")
+        filterTags = Set(defaults.stringArray(forKey: "library_filter_tags") ?? [])
         sort = LibrarySort(rawValue: defaults.string(forKey: "library_sort") ?? "") ?? .alphabetical
         ascending = bool("library_sort_ascending", true)
         showUnreadBadge = bool("library_badge_unread", true)
@@ -117,6 +120,7 @@ public final class LibrarySettings {
 
     public var hasActiveFilter: Bool {
         [filterUnread, filterStarted, filterCompleted, filterBookmarked, filterDownloaded, filterTracked].contains { $0 != .ignore }
+            || !filterTags.isEmpty
     }
 
     private func save(_ value: TriState, _ key: String) {
@@ -156,6 +160,8 @@ public enum LibraryQuery {
         public var bookmarked: TriState = .ignore
         public var downloaded: TriState = .ignore
         public var tracked: TriState = .ignore
+        /// A obra precisa ter todas estas tags (chaves de `GenreTags`).
+        public var tags: Set<String> = []
 
         public init() {}
     }
@@ -168,6 +174,7 @@ public enum LibraryQuery {
                 && filters.bookmarked.matches(entry.hasBookmarks)
                 && filters.downloaded.matches(entry.isDownloaded)
                 && filters.tracked.matches(entry.isTracked)
+                && GenreTags.matches(entry.genres, all: filters.tags)
                 && matches(entry, search: search)
         }
         return sorted(filtered, by: sort, ascending: ascending, seed: seed)

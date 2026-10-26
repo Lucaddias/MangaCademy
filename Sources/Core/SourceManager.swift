@@ -71,6 +71,32 @@ public final class SourceManager {
             return KeyoappSource(id: id, name: info.name, language: lang, baseUrl: info.baseUrl, config: engine)
         case "iken":
             return IkenSource(id: id, name: info.name, language: lang, baseUrl: info.baseUrl, config: engine)
+        case "pizzareader":
+            return PizzaReaderSource(id: id, name: info.name, language: lang, baseUrl: info.baseUrl, config: engine)
+        case "mangacatalog":
+            return MangaCatalogSource(id: id, name: info.name, language: lang, baseUrl: info.baseUrl, config: engine)
+        case "yiimanga":
+            return YiiMangaSource(id: id, name: info.name, language: lang, baseUrl: info.baseUrl, config: engine)
+        case "mangahub":
+            return MangaHubSource(id: id, name: info.name, language: lang, baseUrl: info.baseUrl, config: engine)
+        case "foolslide":
+            return FoolSlideSource(id: id, name: info.name, language: lang, baseUrl: info.baseUrl, config: engine)
+        case "guya":
+            return GuyaSource(id: id, name: info.name, language: lang, baseUrl: info.baseUrl, config: engine)
+        case "mmrcms":
+            return MMRCMSSource(id: id, name: info.name, language: lang, baseUrl: info.baseUrl, config: engine)
+        case "keyoappv2":
+            return KeyoappV2Source(id: id, name: info.name, language: lang, baseUrl: info.baseUrl, config: engine)
+        case "webtoons":
+            return WebtoonsSource(id: id, name: info.name, language: lang, baseUrl: info.baseUrl, config: engine)
+        case "namicomi":
+            return NamiComiSource(id: id, name: info.name, language: lang, baseUrl: info.baseUrl, config: engine)
+        case "globalcomix":
+            return GlobalComixSource(id: id, name: info.name, language: lang, baseUrl: info.baseUrl, config: engine)
+        case "mangaball":
+            return MangaBallSource(id: id, name: info.name, language: lang, baseUrl: info.baseUrl, config: engine)
+        case "comicfury":
+            return ComicFurySource(id: id, name: info.name, language: lang, baseUrl: info.baseUrl, config: engine)
         default:
             return nil
         }
