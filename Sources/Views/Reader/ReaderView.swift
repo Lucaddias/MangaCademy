@@ -847,8 +847,10 @@ public struct ReaderView: View {
     }
 
     private func reloadCurrentChapter() async {
-        // Só as páginas deste capítulo: capas e outros capítulos continuam no cache.
-        ImageCache.shared.remove(urlStrings: currentSegment?.pages.map(\.imageUrl) ?? [])
+        // Só a pasta deste capítulo: capas e outros capítulos continuam no cache.
+        if allChapters.indices.contains(currentChapterIndex) {
+            ChapterPageCache.shared.remove(chapter: ChapterPageCache.key(for: allChapters[currentChapterIndex]))
+        }
         await openChapter(currentChapterIndex)
         hideControls()
     }

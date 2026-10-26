@@ -6,11 +6,14 @@ import UserNotifications
 @main
 struct MihonReaderApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @Environment(\.scenePhase) private var scenePhase
     private let store: (container: ModelContainer, didReset: Bool)
 
     init() {
         store = ModelStore.openRecovering()
         AppStore.container = store.container
+        ImageDiskStore.shared.migrateLegacyCache()
+        Self.trimImageCache()
     }
 
     var body: some Scene {
@@ -18,6 +21,14 @@ struct MihonReaderApp: App {
             RootView(storeWasReset: store.didReset)
         }
         .modelContainer(store.container)
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background { Self.trimImageCache() }
+        }
+    }
+
+    /// Mantém o cache de capas abaixo do teto (as páginas lidas têm o próprio limite).
+    private static func trimImageCache() {
+        Task.detached(priority: .utility) { ImageDiskStore.shared.trim() }
     }
 }
 

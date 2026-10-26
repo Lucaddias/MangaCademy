@@ -132,12 +132,14 @@ struct DownloadSettingsView: View {
     }
 }
 
-/// Espaço ocupado por obra, com opção de apagar; e o cache de imagens.
+/// Espaço ocupado por obra, com opção de apagar; e os caches de capítulos e de capas.
 struct StorageView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var rows: [Row] = []
     @State private var total: Int64 = 0
     @State private var cacheSize: Int64 = 0
+    @State private var chapterCacheSize: Int64 = 0
+    @State private var chapterCacheCount = 0
     @State private var confirmDeleteAll = false
 
     struct Row: Identifiable {
@@ -151,11 +153,14 @@ struct StorageView: View {
         List {
             Section {
                 LabeledContent("Downloads", value: format(total))
-                LabeledContent("Cache de imagens", value: format(cacheSize))
+                LabeledContent("Cache de capítulos", value: "\(chapterCacheCount) de \(ChapterPageCache.shared.limit) · \(format(chapterCacheSize))")
+                LabeledContent("Cache de capas", value: format(cacheSize))
                 Button("Limpar cache de imagens") {
                     ImageCache.shared.clearCache()
                     refresh()
                 }
+            } footer: {
+                Text("O cache guarda as páginas dos últimos \(ChapterPageCache.shared.limit) capítulos lidos e apaga os mais antigos sozinho. Capítulos baixados não contam.")
             }
             if !rows.isEmpty {
                 Section("Por obra") {
@@ -211,6 +216,8 @@ struct StorageView: View {
         }
         .sorted { $0.size > $1.size }
         total = store.totalSize
-        cacheSize = store.size(of: ImageDiskStore.shared.directory)
+        cacheSize = ImageDiskStore.shared.coverSize
+        chapterCacheSize = ChapterPageCache.shared.size
+        chapterCacheCount = ChapterPageCache.shared.chapterCount
     }
 }
