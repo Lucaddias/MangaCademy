@@ -344,9 +344,10 @@ public final class CatalogFeed {
 
     private func ingest(_ item: SourceMangaItem, source: MangaSource) {
         guard !merger.contains(refId: item.id) else { return }
+        let adultSource = SourceManager.shared.isNsfw(source.id)
         // Mesmo título de uma obra já conhecida: funde direto
         if merger.exactMatch(for: item) != nil {
-            merger.add(item, sourceName: source.name)
+            merger.add(item, sourceName: source.name, adultSource: adultSource)
             return
         }
         // Já verificada antes (cache de 14 dias)
@@ -356,7 +357,7 @@ public final class CatalogFeed {
             enriched.genres = Self.unique(item.genres + cached.genres)
             if enriched.coverUrl == nil { enriched.coverUrl = cached.coverUrl }
             let hash = cached.coverUrl == enriched.coverUrl ? cached.hash : nil
-            merger.add(enriched, sourceName: source.name, coverHash: hash)
+            merger.add(enriched, sourceName: source.name, coverHash: hash, adultSource: adultSource)
             return
         }
         let key = TitleKey.normalize(item.title)
@@ -440,7 +441,7 @@ public final class CatalogFeed {
                 coverHash: result.coverHash
             )
         }
-        merger.add(item, sourceName: entry.source.name, coverHash: result.coverHash)
+        merger.add(item, sourceName: entry.source.name, coverHash: result.coverHash, adultSource: SourceManager.shared.isNsfw(entry.source.id))
 
         // Libera quem esperava pelo mesmo título: agora entra direto na obra verificada
         if !entry.key.isEmpty {
@@ -473,6 +474,10 @@ public final class CatalogFeed {
 
     private func publish() {
         var list = merger.works
+        // O ajuste pode mudar com o feed aberto: sem "Mostrar fontes +18", nada que só exista nelas aparece
+        if !Preferences.showNsfwSources {
+            list = list.filter { !$0.onlyAdultSources }
+        }
         if blockAdult {
             if merger.adultCount > 0 { list = list.filter { !$0.isAdult } }
             blockedCount = merger.adultCount

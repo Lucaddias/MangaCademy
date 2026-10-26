@@ -381,6 +381,7 @@ struct SearchResultsView: View {
     var isTag = false
     @AppStorage(Preferences.Key.languageFilter) private var filterRaw: String = Preferences.Default.languageFilter.rawValue
     @AppStorage(Preferences.Key.showNsfwSources) private var showNsfw = Preferences.Default.showNsfwSources
+    @AppStorage(Preferences.Key.blockAdultTags) private var blockAdult = Preferences.Default.blockAdultTags
     @State private var feed = CatalogFeed()
 
     private var filter: LanguageFilter { LanguageFilter(rawValue: filterRaw) ?? .portuguese }
@@ -429,12 +430,14 @@ struct SearchResultsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             guard feed.totalSources == 0 else { return }
-            if isTag {
-                feed.setTagFilter([GenreTags.key(for: query)])
-                feed.reset(filter: .all, mode: .popular, includeNsfw: showNsfw)
-            } else {
-                feed.reset(filter: .all, mode: .search(query), includeNsfw: showNsfw)
-            }
+            if isTag { feed.setTagFilter([GenreTags.key(for: query)]) }
+            reload()
         }
+        .onChange(of: showNsfw) { _, _ in reload() }
+        .onChange(of: blockAdult) { _, _ in reload() }
+    }
+
+    private func reload() {
+        feed.reset(filter: .all, mode: isTag ? .popular : .search(query), includeNsfw: showNsfw)
     }
 }

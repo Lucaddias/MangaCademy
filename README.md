@@ -40,7 +40,7 @@ Como as extensões originais são APKs Android, o app reimplementa em Swift os t
 - **Recentes de verdade** — a aba Recentes ordena as obras pelo capítulo mais novo de todas as fontes, com a legenda _“Cap. 123 · há 2 h”_.
 - **Filtro por tags** — Romance, Escolar, Ficção científica… no Explorar e na Biblioteca. Sinônimos em vários idiomas viram a mesma tag (_School Life_ = _Vida Escolar_ = _Escolar_), e a obra precisa ter todas as tags marcadas.
 - **Capítulos sem repetição** — capítulos de várias scans são mesclados e deduplicados por número.
-- **Bloqueio de conteúdo adulto** — esconde obras com tags como _Adult_, _Adulto_, _Mature_, _Smut_, _Hentai_ ou _+18_ (ligado por padrão, ajustável em Ajustes). Tags como _Vida Adulta_ e _Ecchi_ não são afetadas.
+- **Bloqueio de conteúdo adulto** — esconde obras com tags como _Adult_, _Adulto_, _Mature_, _Smut_, _Hentai_ ou _+18_ e as que só existem em fontes +18, que não marcam as obras (ligado por padrão, ajustável em Ajustes). Tags como _Vida Adulta_ e _Ecchi_ não são afetadas.
 - **Leitor Webtoon e paginado**, com progresso, histórico e biblioteca salvos localmente.
 - **Marcar todos / desmarcar todos** — acima da lista de capítulos, com confirmação; vale também para obras fora da biblioteca.
 - **Virar página com os botões de volume** — Volume − avança e Volume + volta (inversível em Ajustes). No fim do capítulo, um segundo clique abre o próximo.

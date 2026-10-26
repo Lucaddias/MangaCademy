@@ -31,13 +31,17 @@ public struct UnifiedWork: Identifiable, Hashable {
     public var titleKeys: Set<String>
     /// Tags de todas as fontes (sem repetição).
     public private(set) var genres: [String] = []
-    /// Alguma fonte marcou a obra como conteúdo adulto ("Adult", "Adulto", "+18"...).
-    public private(set) var isAdult = false
+    /// Alguma fonte marcou a obra como conteúdo adulto ("Adult", "Adulto", "+18"...)
+    /// ou ela só existe em fontes +18, que não marcam as obras (lá tudo é adulto).
+    public var isAdult: Bool { hasAdultTag || onlyAdultSources }
+    private var hasAdultTag = false
+    /// Todas as fontes da obra são marcadas +18 no índice Keiyoushi.
+    public private(set) var onlyAdultSources = false
     /// Capítulo mais novo entre as fontes (quando a listagem informa), para "Recentes".
     public private(set) var latestChapterName: String?
     public private(set) var latestChapterDate: Date?
 
-    public init(ref: WorkSourceRef, altTitles: [String] = [], genres: [String] = []) {
+    public init(ref: WorkSourceRef, altTitles: [String] = [], genres: [String] = [], fromAdultSource: Bool = false) {
         self.id = ref.id
         self.title = ref.title
         self.coverUrl = ref.coverUrl
@@ -45,6 +49,7 @@ public struct UnifiedWork: Identifiable, Hashable {
         self.refs = [ref]
         self.languages = ref.languages
         self.titleKeys = TitleKey.keys(for: [ref.title] + altTitles)
+        self.onlyAdultSources = fromAdultSource
         addGenres(genres)
     }
 
@@ -74,9 +79,10 @@ public struct UnifiedWork: Identifiable, Hashable {
         refs.filter { $0.coverUrl != nil && $0.coverUrl != coverUrl }
     }
 
-    public mutating func merge(ref: WorkSourceRef, altTitles: [String], genres: [String] = []) {
+    public mutating func merge(ref: WorkSourceRef, altTitles: [String], genres: [String] = [], fromAdultSource: Bool = false) {
         guard !refs.contains(where: { $0.id == ref.id }) else { return }
         refs.append(ref)
+        onlyAdultSources = onlyAdultSources && fromAdultSource
         addLanguages(ref.languages)
         addGenres(genres)
         titleKeys.formUnion(TitleKey.keys(for: [ref.title] + altTitles))
@@ -110,7 +116,7 @@ public struct UnifiedWork: Identifiable, Hashable {
             let key = ContentFilter.normalizeTag(name)
             if !genres.contains(where: { ContentFilter.normalizeTag($0) == key }) {
                 genres.append(name)
-                if ContentFilter.isAdultTag(name) { isAdult = true }
+                if ContentFilter.isAdultTag(name) { hasAdultTag = true }
             }
         }
     }
@@ -272,8 +278,9 @@ public struct WorkMerger {
     }
 
     /// Insere ou funde um item. Retorna true se criou uma obra nova.
+    /// `adultSource`: a fonte é marcada +18 no índice (a obra conta como adulta se só existir nessas fontes).
     @discardableResult
-    public mutating func add(_ item: SourceMangaItem, sourceName: String, coverHash: UInt64? = nil) -> Bool {
+    public mutating func add(_ item: SourceMangaItem, sourceName: String, coverHash: UInt64? = nil, adultSource: Bool = false) -> Bool {
         if indexByRef[item.id] != nil { return false }
         let ref = WorkSourceRef(
             sourceId: item.sourceId,
@@ -298,14 +305,15 @@ public struct WorkMerger {
         }
         if let target {
             let wasAdult = works[target].isAdult
-            works[target].merge(ref: ref, altTitles: item.altTitles, genres: item.genres)
+            works[target].merge(ref: ref, altTitles: item.altTitles, genres: item.genres, fromAdultSource: adultSource)
             works[target].noteLatestChapter(name: item.latestChapterName, date: item.latestChapterDate)
-            if !wasAdult && works[target].isAdult { adultCount += 1 }
+            // Pode deixar de ser adulta: obra de fonte +18 que também está numa fonte comum
+            if wasAdult != works[target].isAdult { adultCount += wasAdult ? -1 : 1 }
             register(item, sets: sets, coverHash: hash, at: target)
             return false
         }
 
-        var work = UnifiedWork(ref: ref, altTitles: item.altTitles, genres: item.genres)
+        var work = UnifiedWork(ref: ref, altTitles: item.altTitles, genres: item.genres, fromAdultSource: adultSource)
         work.noteLatestChapter(name: item.latestChapterName, date: item.latestChapterDate)
         if work.isAdult { adultCount += 1 }
         works.append(work)

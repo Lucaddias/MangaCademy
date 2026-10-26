@@ -13,6 +13,10 @@ public enum ContentFilter {
         "porn", "porno", "pornographic", "pornografia", "pornografico",
         "sexual violence", "violencia sexual", "sexual content", "conteudo sexual", "contenido sexual",
         "manhwa18", "manga18",
+        // Atos sexuais explícitos (tags de sites de doujin/hentai que não usam "Adult")
+        "lolicon", "shotacon", "futanari", "fingering", "anal", "anal sex", "blowjob", "oral sex", "bdsm",
+        "rape", "estupro", "netorare", "ntr", "ahegao", "paizuri", "creampie", "gangbang", "threesome",
+        "sexo", "sex", "sexo a tres", "sexo oral", "sex toys",
         // Classificação que o app anexa às obras do NamiComi
         "content rating: mature", "content rating: erotica", "content rating: pornographic",
     ]

@@ -101,7 +101,7 @@ public struct SettingsView: View {
                 } header: {
                     Text("Conteúdo")
                 } footer: {
-                    Text("Esconde do catálogo e da busca as obras que alguma fonte marca como adultas (Adult, Mature, Smut, Hentai, +18…). Tags como “Vida Adulta” e “Ecchi” não são bloqueadas.")
+                    Text("Esconde do catálogo e da busca as obras que alguma fonte marca como adultas (Adult, Mature, Smut, Hentai, +18…) e as que só existem em fontes +18. Tags como “Vida Adulta” e “Ecchi” não são bloqueadas.")
                 }
 
                 Section {
