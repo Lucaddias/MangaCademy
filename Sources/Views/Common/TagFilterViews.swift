@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Faixa de tags do Explorar: botão com a lista completa, as tags escolhidas (toque remove)
-/// e as mais comuns entre as obras carregadas (toque escolhe).
+/// e as mais comuns entre as obras carregadas, gêneros fixos antes das outras (toque escolhe).
 struct TagChipsBar: View {
     let tags: [GenreTags.Count]
     @Binding var selection: Set<String>
@@ -10,7 +10,7 @@ struct TagChipsBar: View {
     @State private var showPicker = false
 
     private var suggested: [GenreTags.Count] {
-        Array(tags.filter { !selection.contains($0.key) }.prefix(suggestions))
+        Array(tags.filter { $0.count > 0 && !selection.contains($0.key) }.prefix(suggestions))
     }
 
     var body: some View {
@@ -67,17 +67,26 @@ struct TagChipsBar: View {
 }
 
 /// Todas as tags com quantas obras têm cada uma; marca várias (a obra precisa ter todas).
+/// Os gêneros fixos vêm primeiro, em ordem alfabética; depois, as outras tags das fontes.
 struct TagPickerList: View {
     let tags: [GenreTags.Count]
     @Binding var selection: Set<String>
-    var footer = "Aparecem só as obras com todas as tags marcadas. A lista cresce à medida que mais obras carregam."
+    var footer = "Aparecem só as obras com todas as tags marcadas. Os gêneros estão sempre na lista; as outras tags vêm das obras já carregadas."
 
     @State private var search = ""
 
     private var filtered: [GenreTags.Count] {
         let query = search.trimmed
         guard !query.isEmpty else { return tags.filter { !selection.contains($0.key) } }
-        return tags.filter { $0.label.localizedStandardContains(query) || GenreTags.key(for: query) == $0.key }
+        return tags.filter { GenreTags.search(query, matches: $0) }
+    }
+
+    private var genres: [GenreTags.Count] {
+        filtered.filter(\.isGenre).sorted { $0.label.localizedStandardCompare($1.label) == .orderedAscending }
+    }
+
+    private var others: [GenreTags.Count] {
+        filtered.filter { !$0.isGenre }
     }
 
     /// Escolhidas no topo, inclusive as que não estão entre as obras carregadas
@@ -96,10 +105,19 @@ struct TagPickerList: View {
                     }
                 }
             }
+            if !genres.isEmpty {
+                Section("Gêneros") {
+                    ForEach(genres) { tag in
+                        row(label: tag.label, key: tag.key, count: tag.count > 0 ? tag.count : nil)
+                    }
+                }
+            }
             Section {
-                ForEach(filtered) { tag in
+                ForEach(others) { tag in
                     row(label: tag.label, key: tag.key, count: tag.count)
                 }
+            } header: {
+                if !others.isEmpty && !genres.isEmpty { Text("Outras tags") }
             } footer: {
                 Text(tags.isEmpty ? "As tags aparecem quando as obras terminam de carregar." : footer)
             }

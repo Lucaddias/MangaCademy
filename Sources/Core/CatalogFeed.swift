@@ -37,8 +37,8 @@ public final class CatalogFeed {
     public private(set) var filter: LanguageFilter = .all
     /// Tags escolhidas (chaves de `GenreTags`): só aparecem obras com todas elas.
     public private(set) var tagFilter: Set<String> = []
-    /// Tags das obras já carregadas, das mais comuns para as menos comuns.
-    public private(set) var availableTags: [GenreTags.Count] = []
+    /// Todos os gêneros fixos e depois as tags das obras já carregadas, das mais comuns para as menos comuns.
+    public private(set) var availableTags = GenreTags.counts([], includeAllGenres: true)
     /// Obras carregadas antes do filtro de tags.
     public private(set) var loadedCount = 0
 
@@ -136,7 +136,7 @@ public final class CatalogFeed {
         idleLatest = [:]
         latestSortDate = [:]
         oldestShown = nil
-        availableTags = []
+        availableTags = GenreTags.counts([], includeAllGenres: true)
         loadedCount = 0
         matchingCount = 0
 
@@ -485,7 +485,7 @@ public final class CatalogFeed {
             blockedCount = 0
         }
         loadedCount = list.count
-        availableTags = GenreTags.counts(list.map(\.genres))
+        availableTags = GenreTags.counts(list.map(\.genres), includeAllGenres: true)
         if !tagFilter.isEmpty {
             list = list.filter { GenreTags.matches($0.genres, all: tagFilter) }
         }

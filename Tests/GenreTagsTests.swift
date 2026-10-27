@@ -36,7 +36,66 @@ struct GenreTagsTests {
         #expect(counts.first { $0.label == "Escolar" }?.count == 2)
         // Desconhecida: a grafia mais comum vira o nome
         #expect(counts.first { $0.key == GenreTags.key(for: "cultivo de arroz") }?.label == "Cultivo de Arroz")
-        #expect(counts.count == 4)
-        #expect(counts.last?.label == "Drama")
+        // Gêneros fixos antes das outras tags, mesmo que a outra seja mais comum
+        #expect(counts.map(\.label) == ["Romance", "Escolar", "Drama", "Cultivo de Arroz"])
+    }
+
+    @Test func allGenresComeFirstEvenWithoutWorks() {
+        let counts = GenreTags.counts([["Cultivo de Arroz", "Drama"]], includeAllGenres: true)
+        #expect(counts.count == GenreTags.genres.count + 1)
+        #expect(counts.first?.label == "Drama")
+        #expect(counts.last?.label == "Cultivo de Arroz")
+        let genresFirst = counts.dropLast().allSatisfy { $0.isGenre }
+        #expect(genresFirst)
+        #expect(counts.first { $0.label == "Murim" }?.count == 0)
+        #expect(GenreTags.counts([]).isEmpty)
+    }
+
+    @Test func asianCyrillicArabicThaiAndPolishTagsJoinTheGenres() {
+        let romance = GenreTags.key(for: "Romance")
+        for tag in ["恋愛", "ロマンス", "恋爱", "戀愛", "로맨스", "Романтика", "رومانسي", "โรแมนติก", "Romans"] {
+            #expect(GenreTags.key(for: tag) == romance, "\(tag)")
+        }
+        #expect(GenreTags.key(for: "アクション") == GenreTags.key(for: "Action"))
+        #expect(GenreTags.key(for: "異世界") == GenreTags.key(for: "Isekai"))
+        #expect(GenreTags.key(for: "회귀") == GenreTags.key(for: "Regression"))
+        #expect(GenreTags.key(for: "Фантастика") == GenreTags.key(for: "Sci-Fi"))
+        #expect(GenreTags.key(for: "Фэнтези") == GenreTags.key(for: "Fantasy"))
+    }
+
+    @Test func falseFriendsStayOutOfRomance() {
+        let romance = GenreTags.key(for: "Romance")
+        // "Livro" em polonês, russo, francês e alemão
+        for tag in ["Powieść", "Роман", "Roman", "Novel", "ラブコメ"] {
+            #expect(GenreTags.key(for: tag) != romance, "\(tag)")
+        }
+        // Sozinho, 少女 é a menina da história, não a demografia
+        #expect(!GenreTags.key(for: "少女").contains("shoujo"))
+    }
+
+    @Test func searchFindsGenresBySynonymPieces() {
+        let romance = GenreTags.Count(key: GenreTags.key(for: "romance"), label: "Romance", count: 0)
+        #expect(GenreTags.search("roman", matches: romance))
+        #expect(GenreTags.search("恋", matches: romance))
+        #expect(GenreTags.search("романт", matches: romance))
+        #expect(!GenreTags.search("terror", matches: romance))
+        let unknown = GenreTags.Count(key: GenreTags.key(for: "Cultivo de Arroz"), label: "Cultivo de Arroz", count: 2)
+        #expect(GenreTags.search("arroz", matches: unknown))
+        #expect(GenreTags.search("cultivo-de-arroz", matches: unknown))
+    }
+
+    @Test func noSynonymBelongsToTwoGenres() {
+        var owner: [String: String] = [:]
+        var conflicts: [String] = []
+        for genre in GenreTags.genres {
+            for synonym in genre.synonyms {
+                let normalized = GenreTags.normalize(synonym)
+                if let other = owner[normalized], other != genre.key {
+                    conflicts.append("\(synonym): \(other) e \(genre.key)")
+                }
+                owner[normalized] = owner[normalized] ?? genre.key
+            }
+        }
+        #expect(conflicts.isEmpty, "\(conflicts)")
     }
 }
