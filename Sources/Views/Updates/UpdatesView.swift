@@ -97,42 +97,54 @@ struct UpdatesView: View {
             let items = items
             let days = Dictionary(grouping: items) { Calendar.current.startOfDay(for: $0.date) }
             List {
-                if updater.isRunning {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ProgressView(value: Double(updater.progress), total: Double(max(updater.total, 1)))
-                        Text("Atualizando \(updater.progress) de \(updater.total)…")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
+                Group {
+                    if updater.isRunning {
+                        UpdateProgressBar(updater: updater)
+                            .listRowInsets(EdgeInsets())
+                            .padding(.vertical, Theme.Space.s)
                     }
-                }
-                if !updater.errors.isEmpty {
-                    NavigationLink {
-                        UpdateErrorsView()
-                    } label: {
-                        Label("\(updater.errors.count) obras falharam na última atualização", systemImage: "exclamationmark.triangle")
-                            .foregroundStyle(.orange)
+                    if !updater.errors.isEmpty {
+                        NavigationLink {
+                            UpdateErrorsView()
+                        } label: {
+                            Label("\(updater.errors.count) falhas", systemImage: "exclamationmark.triangle")
+                                .textRole(.meta)
+                                .foregroundStyle(Theme.caution)
+                        }
+                        .accessibilityLabel("\(updater.errors.count) obras falharam na última atualização")
                     }
-                }
-                if items.isEmpty && !updater.isRunning {
-                    ContentUnavailableView {
-                        Label("Sem novidades", systemImage: "bell")
-                    } description: {
-                        Text(lastRunText)
-                    } actions: {
-                        Button("Atualizar biblioteca") { runUpdate() }
-                            .buttonStyle(.borderedProminent)
-                    }
-                    .listRowSeparator(.hidden)
-                }
-                ForEach(days.keys.sorted(by: >), id: \.self) { day in
-                    Section(day.formatted(.relative(presentation: .named, unitsStyle: .wide)).capitalized(with: .current)) {
-                        ForEach(days[day] ?? []) { item in
-                            row(item)
+                    if items.isEmpty && !updater.isRunning {
+                        ContentUnavailableView {
+                            Label("Sem novidades", systemImage: "bell")
+                        } description: {
+                            Text(lastRunText)
+                        } actions: {
+                            Button("Atualizar") { runUpdate() }
+                                .buttonStyle(.borderedProminent)
                         }
                     }
                 }
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+                ForEach(days.keys.sorted(by: >), id: \.self) { day in
+                    let dayItems = days[day] ?? []
+                    Section {
+                        ForEach(Array(dayItems.enumerated()), id: \.element.id) { offset, item in
+                            // Capítulos seguidos da mesma obra: capa e título só no primeiro
+                            row(item, continuesPrevious: offset > 0 && dayItems[offset - 1].manga.id == item.manga.id)
+                        }
+                    } header: {
+                        Text(day.formatted(.relative(presentation: .named, unitsStyle: .wide)).capitalized(with: .current))
+                            .textRole(.caption)
+                            .fontWeight(.semibold)
+                    }
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 0, leading: Theme.Space.margin, bottom: 0, trailing: Theme.Space.margin))
+                }
             }
             .listStyle(.plain)
+            .themedList()
             .navigationTitle("Novidades")
             .refreshable { await updater.update(categoryId: nil, context: modelContext) }
             .toolbar {
@@ -176,42 +188,55 @@ struct UpdatesView: View {
     }
 
     private var lastRunText: String {
-        guard let last = updater.lastRun else { return "Puxe para baixo para procurar capítulos novos nas obras da biblioteca." }
-        return "Última atualização \(last.formatted(.relative(presentation: .named)))."
+        guard let last = updater.lastRun else { return "Puxe para atualizar." }
+        return "Atualizado \(last.formatted(.relative(presentation: .named)))."
     }
 
-    private func row(_ item: UpdateItem) -> some View {
+    private func row(_ item: UpdateItem, continuesPrevious: Bool) -> some View {
         let work = UnifiedWork(libraryManga: item.manga)
         return Button {
             open(item)
         } label: {
-            HStack(spacing: 12) {
-                AsyncMangaCover(urlString: work.coverUrl, cornerRadius: 6, referer: work.coverSourceId.flatMap { SourceManager.shared.getSource(id: $0)?.imageReferer })
-                    .frame(width: 44, height: 66)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(item.manga.title)
-                        .font(.subheadline.bold())
-                        .lineLimit(1)
+            HStack(spacing: Theme.Space.m) {
+                Group {
+                    if continuesPrevious {
+                        Color.clear
+                    } else {
+                        AsyncMangaCover(urlString: work.coverUrl, cornerRadius: Theme.Radius.thumb, referer: work.coverSourceId.flatMap { SourceManager.shared.getSource(id: $0)?.imageReferer })
+                    }
+                }
+                .frame(width: 40, height: continuesPrevious ? 0 : 60)
+                VStack(alignment: .leading, spacing: 2) {
+                    if !continuesPrevious {
+                        Text(item.manga.title)
+                            .textRole(.bodyStrong)
+                            .lineLimit(1)
+                    }
                     Text(item.chapter.name)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .textRole(.meta)
                         .lineLimit(1)
                 }
-                Spacer()
+                Spacer(minLength: 0)
                 if DownloadStore.shared.isDownloaded(item.chapter, mangaId: item.manga.id) {
-                    Image(systemName: "arrow.down.circle.fill").foregroundStyle(.teal)
+                    Image(systemName: "arrow.down.circle.fill")
+                        .foregroundStyle(Theme.positive)
+                        .accessibilityLabel("Baixado")
                 }
             }
+            .padding(.vertical, continuesPrevious ? Theme.Space.xs : Theme.Space.s)
             .opacity(item.isRead ? 0.45 : 1)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(item.manga.title), \(item.chapter.name)")
         .swipeActions(edge: .trailing) {
             Button {
                 ChapterStore.setRead(!item.isRead, chapter: item.chapter, mangaId: item.manga.id, context: modelContext)
             } label: {
                 Label(item.isRead ? "Não lido" : "Lido", systemImage: item.isRead ? "circle" : "checkmark.circle")
             }
-            .tint(.blue)
+            .tint(Theme.accent)
         }
     }
 
@@ -268,14 +293,13 @@ struct UpcomingView: View {
                             MangaDetailView(work: UnifiedWork(libraryManga: manga))
                         } label: {
                             HStack(spacing: 12) {
-                                AsyncMangaCover(urlString: UnifiedWork(libraryManga: manga).coverUrl, cornerRadius: 4)
+                                AsyncMangaCover(urlString: UnifiedWork(libraryManga: manga).coverUrl, cornerRadius: Theme.Radius.thumb)
                                     .frame(width: 36, height: 54)
-                                VStack(alignment: .leading) {
-                                    Text(manga.title).font(.subheadline).lineLimit(2)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(manga.title).textRole(.body).lineLimit(2)
                                     if let latest = manga.latestUploadAt {
                                         Text("Último: \(latest.formatted(date: .abbreviated, time: .omitted))")
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
+                                            .textRole(.caption)
                                     }
                                 }
                             }
@@ -284,6 +308,7 @@ struct UpcomingView: View {
                 }
             }
         }
+        .themedList()
         .navigationTitle("Próximos")
     }
 }
@@ -297,8 +322,8 @@ struct UpdateErrorsView: View {
         List {
             ForEach(updater.errors) { error in
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(error.title).font(.subheadline.bold())
-                    Text(error.message).font(.caption).foregroundStyle(.secondary)
+                    Text(error.title).textRole(.bodyStrong)
+                    Text(error.message).textRole(.meta)
                 }
             }
         }
@@ -307,6 +332,7 @@ struct UpdateErrorsView: View {
                 ContentUnavailableView("Nenhum erro", systemImage: "checkmark.circle")
             }
         }
+        .themedList()
         .navigationTitle("Erros da atualização")
         .toolbar {
             Button("Tentar de novo") {
@@ -340,7 +366,7 @@ struct UpdateSettingsView: View {
                         if on { Task { _ = await UpdateNotifier.requestPermission() } }
                     }
             } footer: {
-                Text("O iOS decide o melhor momento para rodar em segundo plano. Se passar do prazo, a atualização roda ao abrir o app.")
+                Text("Se o iOS atrasar, roda ao abrir o app.")
             }
             Section("Pular obras") {
                 Toggle("Completas", isOn: $settings.skipCompleted)
@@ -358,10 +384,11 @@ struct UpdateSettingsView: View {
                 } header: {
                     Text("Categorias")
                 } footer: {
-                    Text("Toque para alternar: incluir ✓, excluir ✕ ou ignorar. Sem nenhuma incluída, todas entram.")
+                    Text("Toque para incluir ✓, excluir ✕ ou ignorar.")
                 }
             }
         }
+        .themedList()
         .navigationTitle("Atualizações")
     }
 
@@ -378,8 +405,8 @@ struct UpdateSettingsView: View {
         } label: {
             HStack {
                 Image(systemName: state.symbol)
-                    .foregroundStyle(state == .exclude ? Color.red : Color.accentColor)
-                Text(name).foregroundStyle(.primary)
+                    .foregroundStyle(state == .exclude ? Theme.critical : Theme.accent)
+                Text(name).foregroundStyle(Theme.ink)
             }
         }
     }

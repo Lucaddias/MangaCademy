@@ -10,26 +10,26 @@ struct DownloadQueueView: View {
             if manager.waitingForWifi {
                 Label("Aguardando Wi‑Fi (ajuste “Só no Wi‑Fi”).", systemImage: "wifi")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.inkSecondary)
             }
             if manager.queue.isEmpty {
                 ContentUnavailableView("Nenhum download", systemImage: "arrow.down.circle", description: Text("Baixe capítulos pelo detalhe da obra."))
             }
             ForEach(manager.queue) { task in
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(task.mangaTitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    Text(task.mangaTitle).font(.caption).foregroundStyle(Theme.inkSecondary).lineLimit(1)
                     Text(task.name).font(.subheadline).lineLimit(1)
                     switch task.state {
                     case .queued:
-                        Text(manager.isPaused ? "Pausado" : "Na fila").font(.caption2).foregroundStyle(.tertiary)
+                        Text(manager.isPaused ? "Pausado" : "Na fila").font(.caption2).foregroundStyle(Theme.inkTertiary)
                     case .downloading:
                         ProgressView(value: task.fraction) {
                             Text(task.totalPages > 0 ? "\(task.downloadedPages) de \(task.totalPages) páginas" : "Buscando páginas…")
                                 .font(.caption2)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Theme.inkSecondary)
                         }
                     case .failed:
-                        Text(task.error ?? "Falhou").font(.caption2).foregroundStyle(.red).lineLimit(2)
+                        Text(task.error ?? "Falhou").font(.caption2).foregroundStyle(Theme.critical).lineLimit(2)
                     }
                 }
                 .swipeActions {
@@ -38,6 +38,7 @@ struct DownloadQueueView: View {
             }
             .onMove { manager.move(fromOffsets: $0, toOffset: $1) }
         }
+        .themedList()
         .navigationTitle("Fila de downloads")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -127,6 +128,7 @@ struct DownloadSettingsView: View {
                 NavigationLink("Armazenamento") { StorageView() }
             }
         }
+        .themedList()
         .navigationTitle("Downloads")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -169,7 +171,7 @@ struct StorageView: View {
                             Text(format(row.size))
                         } label: {
                             Text(row.title).lineLimit(1)
-                            Text("\(row.chapters) capítulos").font(.caption).foregroundStyle(.secondary)
+                            Text("\(row.chapters) capítulos").font(.caption).foregroundStyle(Theme.inkSecondary)
                         }
                         .swipeActions {
                             Button("Apagar", role: .destructive) {
@@ -186,6 +188,7 @@ struct StorageView: View {
                 }
             }
         }
+        .themedList()
         .navigationTitle("Armazenamento")
         .navigationBarTitleDisplayMode(.inline)
         .task { refresh() }
