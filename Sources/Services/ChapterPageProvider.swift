@@ -16,10 +16,6 @@ enum ChapterPageProvider {
         }
     }
 
-    /// Capítulos protegidos no cache de páginas: os dois últimos carregados, que no leitor são
-    /// o capítulo aberto e o próximo já carregado.
-    private static var pinnedChapters: [String] = []
-
     static func pages(for chapter: SourceChapterItem, mangaId: String) async throws -> [SourcePageItem] {
         if let local = DownloadStore.shared.downloadedPages(for: chapter, mangaId: mangaId), !local.isEmpty {
             return local
@@ -31,15 +27,13 @@ enum ChapterPageProvider {
         return pages
     }
 
-    /// Páginas da internet ficam na pasta do capítulo no cache, que guarda no máximo 10 capítulos.
+    /// Páginas da internet ficam na pasta temporária do capítulo.
     private static func cache(_ pages: [SourcePageItem], of chapter: SourceChapterItem) {
         // Páginas da Fonte Local já estão no aparelho.
         let urls = pages.map(\.imageUrl).filter { !$0.hasPrefix("file:") }
         guard !urls.isEmpty else { return }
         let key = ChapterPageCache.key(for: chapter)
-        pinnedChapters = Array(([key] + pinnedChapters.filter { $0 != key }).prefix(2))
         ChapterPageCache.shared.assign(urls: urls, to: key)
-        ChapterPageCache.shared.enforceLimit(pinned: Set(pinnedChapters))
     }
 }
 

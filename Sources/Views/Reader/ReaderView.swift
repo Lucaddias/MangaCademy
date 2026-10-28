@@ -61,6 +61,9 @@ public struct ReaderView: View {
     @State private var segments: [ReaderSegment] = []
     /// Capítulos abertos nesta sessão (para "apagar depois de ler").
     @State private var visitedChapters: Set<Int> = []
+    @State private var cacheOwner = UUID()
+    @State private var readerActive = false
+    @State private var sessionReadChapters: Set<Int> = []
     /// Id do `ReaderDisplayItem` na tela.
     @State private var position: String?
     @State private var isLoading = true
@@ -316,6 +319,7 @@ public struct ReaderView: View {
             handleVolumeButton(button)
         }
         .task {
+            readerActive = true
             loadMangaSettings()
             applyScreenSettings()
             await openChapter(startChapterIndex)
@@ -346,7 +350,9 @@ public struct ReaderView: View {
             AutoDownloader.downloadAhead(from: index, in: allChapters, mangaId: mangaId, mangaTitle: mangaTitle, context: modelContext)
         }
         .onDisappear {
+            readerActive = false
             saveProgress()
+            updateCacheRetention(closing: true)
             AutoDownloader.deleteRead(
                 visitedChapters.filter(allChapters.indices.contains).map { allChapters[$0] },
                 mangaId: mangaId,
@@ -794,6 +800,7 @@ public struct ReaderView: View {
             return
         }
         startChapterIndex = index
+        protectCache(current: index)
         isLoading = true
         errorMessage = nil
         edgeHint = nil
@@ -803,6 +810,10 @@ public struct ReaderView: View {
         resetZoom()
         do {
             let segment = try await loadSegment(index)
+            guard readerActive, !Task.isCancelled else {
+                discardUnprotectedCache(index)
+                return
+            }
             // Retoma onde parou; capítulo já lido recomeça do início.
             let saved = ChapterStore.record(for: allChapters[index], mangaId: mangaId, context: modelContext)
             let resume = atLastPage ? segment.pages.count
@@ -836,8 +847,10 @@ public struct ReaderView: View {
         Task {
             do {
                 let segment = try await loadSegment(next)
-                if segments.last?.chapterIndex == last.chapterIndex {
+                if readerActive && segments.last?.chapterIndex == last.chapterIndex {
                     segments.append(segment)
+                } else {
+                    discardUnprotectedCache(next)
                 }
             } catch {
                 nextLoadError = error.localizedDescription
@@ -849,7 +862,8 @@ public struct ReaderView: View {
     private func reloadCurrentChapter() async {
         // Só a pasta deste capítulo: capas e outros capítulos continuam no cache.
         if allChapters.indices.contains(currentChapterIndex) {
-            ChapterPageCache.shared.remove(chapter: ChapterPageCache.key(for: allChapters[currentChapterIndex]))
+            let key = ChapterPageCache.key(for: allChapters[currentChapterIndex])
+            await Task.detached { ChapterPageCache.shared.remove(chapter: key) }.value
         }
         await openChapter(currentChapterIndex)
         hideControls()
@@ -857,13 +871,16 @@ public struct ReaderView: View {
 
     private func positionChanged() {
         let chapter = currentChapterIndex
+        let moved = lastChapterIndex != chapter
         // Passou para o capítulo seguinte na rolagem contínua: o anterior foi terminado.
         if let last = lastChapterIndex, chapter < last {
             markRead(last)
             saveProgress(chapterIndex: last, page: segments.first { $0.chapterIndex == last }?.pages.count)
         }
         lastChapterIndex = chapter
+        if moved { protectCache(current: chapter) }
         markReadIfFinished()
+        if moved || (currentSegment.map { currentPage >= $0.pages.count } ?? false) { updateCacheRetention() }
         prefetchAhead()
         if let segment = segments.last, segment.chapterIndex == chapter, currentPage >= segment.pages.count - 2 {
             appendNextChapter()
@@ -872,6 +889,7 @@ public struct ReaderView: View {
 
     private func reachedEnd(of chapterIndex: Int) {
         markRead(chapterIndex)
+        updateCacheRetention()
         appendNextChapter()
     }
 
@@ -933,10 +951,45 @@ public struct ReaderView: View {
     }
 
     private func markRead(_ index: Int) {
-        guard !incognito, allChapters.indices.contains(index) else { return }
+        guard allChapters.indices.contains(index) else { return }
+        sessionReadChapters.insert(index)
+        guard !incognito else { return }
         let ch = allChapters[index]
         guard ChapterStore.record(for: ch, mangaId: mangaId, context: modelContext)?.isRead != true else { return }
         ChapterStore.setRead(true, chapter: ch, mangaId: mangaId, context: modelContext)
+    }
+
+    private func discardUnprotectedCache(_ index: Int) {
+        guard allChapters.indices.contains(index) else { return }
+        let key = ChapterPageCache.key(for: allChapters[index])
+        Task.detached(priority: .utility) { ChapterPageCache.shared.removeEligible([key]) }
+    }
+
+    /// Mantém protegidos apenas o capítulo atual e aquele carregado adiante.
+    private func protectCache(current: Int) {
+        var indices = [current]
+        if let next = nextChapterIndex(after: current) { indices.append(next) }
+        let keys = Set(indices.filter(allChapters.indices.contains).map { ChapterPageCache.key(for: allChapters[$0]) })
+        ChapterPageCache.shared.setProtected(keys, owner: cacheOwner)
+    }
+
+    private func updateCacheRetention(closing: Bool = false) {
+        let progress = readProgress()
+        let read = allChapters.indices.map { sessionReadChapters.contains($0) || (!incognito && progress.isRead(allChapters[$0])) }
+        let partial = allChapters.indices.map { visitedChapters.contains($0) || (!incognito && progress.pageInProgress(allChapters[$0]) != nil) }
+        let identities = allChapters.map { ChapterStore.progressKey($0) }
+        let indices = ChapterCachePolicy.eligible(read: read, partial: partial, identity: identities)
+        var keys = Set(indices.map { ChapterPageCache.key(for: allChapters[$0]) })
+        if closing {
+            let disposable = segments.map(\.chapterIndex).filter { (incognito || !visitedChapters.contains($0)) && allChapters.indices.contains($0) }
+            keys.formUnion(disposable.map { ChapterPageCache.key(for: allChapters[$0]) })
+            if incognito {
+                keys.formUnion(visitedChapters.filter(allChapters.indices.contains).map { ChapterPageCache.key(for: allChapters[$0]) })
+            }
+            ChapterPageCache.shared.releaseProtection(owner: cacheOwner)
+        }
+        let removableKeys = keys
+        Task.detached(priority: .utility) { ChapterPageCache.shared.removeEligible(removableKeys) }
     }
 
     // MARK: - Ajustes da obra
