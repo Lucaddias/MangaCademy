@@ -83,13 +83,51 @@ struct LatestMergeTests {
         #expect(merge.buffer.isEmpty)
     }
 
-    @Test func undatedItemsInheritOrEstimate() {
+    @Test func undatedItemsFollowDatedItemsWithoutInventedDates() {
         var merge = LatestMerge(now: now)
         merge.add([item("a1", source: "a", hoursAgo: 1), item("a2", source: "a", hoursAgo: nil)], from: "a", hasMore: false)
         merge.add([item("t1", source: "t", hoursAgo: nil), item("t2", source: "t", hoursAgo: nil)], from: "t", hasMore: false)
         merge.add([item("b1", source: "b", hoursAgo: 30)], from: "b", hasMore: false)
-        // "a2" fica junto de "a1"; o topo de uma fonte sem datas entra depois das últimas 24 h
-        #expect(drain(&merge) == ["a1", "a2", "t1", "t2", "b1"])
+        #expect(drain(&merge) == ["a1", "b1", "a2", "t1", "t2"])
+    }
+
+    @Test func undatedPagesRemainPaginated() {
+        var merge = LatestMerge(now: now)
+        merge.add([item("sem-data", source: "a", hoursAgo: nil)], from: "a", hasMore: true)
+        #expect(drain(&merge).isEmpty)
+        #expect(merge.sourceToFetch(among: ["a"], newerThan: nil) == "a")
+        merge.add([item("pagina-2", source: "a", hoursAgo: nil)], from: "a", hasMore: false)
+        #expect(drain(&merge) == ["sem-data", "pagina-2"])
+    }
+
+    @Test func datedSecondPageAppearsBeforeUndatedFirstPage() {
+        var merge = LatestMerge(now: now)
+        merge.add([item("sem-data", source: "a", hoursAgo: nil)], from: "a", hasMore: true)
+        #expect(merge.popSafe()?.item.title == nil)
+        #expect(merge.sourceToFetch(among: ["a"], newerThan: merge.buffer.first?.sortDate) == "a")
+        merge.add([item("datado", source: "a", hoursAgo: 2)], from: "a", hasMore: false)
+        #expect(drain(&merge) == ["datado", "sem-data"])
+    }
+
+    @Test func undatedSourceMakesProgressAndLateDatesCanBeInserted() {
+        var merge = LatestMerge(now: now)
+        merge.add([item("sem-data-1", source: "a", hoursAgo: nil)], from: "a", hasMore: true)
+        #expect(merge.popSafe()?.item.title == nil)
+        #expect(merge.sourceToFetch(among: ["a"], newerThan: merge.buffer.first?.sortDate) == "a")
+        merge.add([item("sem-data-2", source: "a", hoursAgo: nil)], from: "a", hasMore: true)
+        #expect(drain(&merge) == ["sem-data-1", "sem-data-2"])
+        #expect(merge.sourceToFetch(among: ["a"], newerThan: nil) == "a")
+        merge.add([item("datado-tardio", source: "a", hoursAgo: 3)], from: "a", hasMore: false)
+        #expect(merge.popSafe(newerThan: .distantPast)?.item.title == "datado-tardio")
+    }
+
+    @Test func mixedPageWaitsForDatedFrontierBeforeUndated() {
+        var merge = LatestMerge(now: now)
+        merge.add([item("a1", source: "a", hoursAgo: 1), item("unknown", source: "a", hoursAgo: nil)], from: "a", hasMore: true)
+        #expect(drain(&merge) == ["a1"])
+        #expect(merge.sourceToFetch(among: ["a"], newerThan: merge.buffer.first?.sortDate) == "a")
+        merge.add([item("a2", source: "a", hoursAgo: 4)], from: "a", hasMore: false)
+        #expect(drain(&merge) == ["a2", "unknown"])
     }
 
     @Test func cutoffOnlyReleasesNewerItems() {

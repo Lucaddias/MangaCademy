@@ -381,6 +381,7 @@ struct CoverSheet: View {
 
 /// Resultados da busca unificada (gênero, autor ou título tocados no detalhe).
 struct SearchResultsView: View {
+    @Environment(\.modelContext) private var modelContext
     let query: String
     /// Busca por tag: obras populares que têm a tag (e as outras que o usuário marcar).
     var isTag = false
@@ -443,6 +444,12 @@ struct SearchResultsView: View {
     }
 
     private func reload() {
+        Self.configureSafety(feed, context: modelContext)
         feed.reset(filter: .all, mode: isTag ? .popular : .search(query), includeNsfw: showNsfw)
+    }
+
+    static func configureSafety(_ feed: CatalogFeed, context: ModelContext) {
+        let safety = LocalIdentitySafety.Gate(context: context)
+        feed.canMergeIdentities = { safety.decide($0) }
     }
 }
