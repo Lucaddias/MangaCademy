@@ -14,6 +14,7 @@ final class WorkDetailModel {
     private(set) var languages: [String] = []
     private(set) var pendingSources = 0
     private(set) var failures: [String] = []
+    private(set) var loadedSourceCount = 0
     private(set) var hasLoaded = false
     /// Alguma fonte marcou a obra como conteúdo adulto.
     private(set) var isAdult = false
@@ -77,6 +78,7 @@ final class WorkDetailModel {
     func reload() async {
         hasLoaded = false
         failures = []
+        loadedSourceCount = 0
         rawChapters = []
         chaptersByLanguage = [:]
         languages = []
@@ -108,6 +110,7 @@ final class WorkDetailModel {
         pendingSources = loader.pendingSources
         work = state.work
         failures = state.failures
+        loadedSourceCount = state.loadedSourceCount
         blockedRefs = state.blockedRefs
         rawChapters = state.chapters
         regroup()
@@ -824,9 +827,13 @@ public struct MangaDetailView: View {
     }
 
     private var emptyChaptersText: String {
-        if !model.chapters.isEmpty { return "Nenhum capítulo com esses filtros." }
-        if !model.failures.isEmpty { return "Não foi possível carregar os capítulos." }
-        return model.languages.isEmpty ? "Nenhum capítulo nas fontes desta obra." : "Sem capítulos neste idioma."
+        if !model.chapters.isEmpty || !model.rawChapters.isEmpty { return "Nenhum capítulo com esses filtros." }
+        if !model.failures.isEmpty {
+            return model.loadedSourceCount > 0
+                ? "Nenhum capítulo acessível nas fontes consultadas; algumas consultas falharam."
+                : "Não foi possível carregar os capítulos. Confira os erros das fontes e tente novamente."
+        }
+        return "Nenhum capítulo acessível nas fontes desta obra."
     }
 
     private func chapterRow(_ ch: SourceChapterItem, progress: ChapterProgress, flags: ChapterListFlags) -> some View {

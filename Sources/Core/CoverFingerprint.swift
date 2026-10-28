@@ -95,6 +95,7 @@ public final class ImageDiskStore: @unchecked Sendable {
 
     /// Baixa (ou lê do disco) os bytes de uma imagem.
     public func fetch(urlString: String, referer: String?) async -> Data? {
+        let registration = chapters.registration(for: urlString)
         if let cached = data(for: urlString) { return cached }
         guard let url = URL(string: urlString) else { return nil }
         // Páginas baixadas e da Fonte Local já estão no aparelho.
@@ -109,7 +110,11 @@ public final class ImageDiskStore: @unchecked Sendable {
         guard let (data, response) = try? await URLSession.shared.data(for: req) else { return nil }
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) { return nil }
         guard !data.isEmpty else { return nil }
-        store(data, for: urlString)
+        if let registration {
+            _ = chapters.store(data, for: urlString, expected: registration)
+        } else {
+            store(data, for: urlString)
+        }
         return data
     }
 }

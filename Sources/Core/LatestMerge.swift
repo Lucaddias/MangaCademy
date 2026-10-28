@@ -6,9 +6,7 @@ import Foundation
 /// Um item só sai do buffer quando nenhuma página ainda não lida pode ter algo mais novo que ele
 /// (a "fronteira" de cada fonte é a data mais antiga que ela já mandou).
 ///
-/// Itens sem data (temas que não informam, ou data ilegível) herdam a data do item anterior da
-/// mesma fonte; sem nenhuma, recebem uma estimada pela posição: o topo de "Recentes" de um site
-/// saiu há pouco, mas não dá para saber quando — entram depois do que saiu nas últimas 24 horas.
+/// Itens sem data verificável ficam depois dos itens datados, sem atribuir-lhes uma data fictícia.
 struct LatestMerge {
     struct Entry {
         let item: SourceMangaItem
@@ -16,15 +14,14 @@ struct LatestMerge {
         let sortDate: Date
     }
 
-    static let undatedOffset: TimeInterval = 86_400
-
     /// Itens ainda não mostrados, do mais novo para o mais antigo.
     private(set) var buffer: [Entry] = []
     /// Data mais antiga já recebida de cada fonte que ainda tem páginas.
     private(set) var frontier: [String: Date] = [:]
     private var oldest: [String: Date] = [:]
-    private var lastRealDate: [String: Date] = [:]
-    private var undatedCount: [String: Int] = [:]
+    /// Um número limitado de páginas desconhecidas é examinado antes de publicar resultados.
+    private var undatedPages: [String: Int] = [:]
+    private static let undatedLookaheadPages = 2
     private let now: Date
 
     init(now: Date = Date()) {
@@ -34,12 +31,21 @@ struct LatestMerge {
     /// Página recebida de uma fonte. `keep` decide quais itens entram no buffer (os demais só
     /// contam para a fronteira, ex.: obras de outro idioma numa fonte multi-idioma).
     mutating func add(_ items: [SourceMangaItem], from sourceId: String, hasMore: Bool, keep: (SourceMangaItem) -> Bool = { _ in true }) {
+        var foundDate = false
         for item in items {
-            let date = sortDate(for: item, sourceId: sourceId)
-            oldest[sourceId] = min(oldest[sourceId] ?? date, date)
+            let date = sortDate(for: item)
+            // A ausência de data não prova que a página seguinte seja antiga.
+            if date != .distantPast {
+                foundDate = true
+                oldest[sourceId] = min(oldest[sourceId] ?? date, date)
+            }
             if keep(item) { insert(Entry(item: item, sourceId: sourceId, sortDate: date)) }
         }
-        frontier[sourceId] = hasMore ? oldest[sourceId] : nil
+        if !foundDate && oldest[sourceId] == nil { undatedPages[sourceId, default: 0] += 1 }
+        // Dados ausentes não garantem a ordem. Limitar a antecipação evita bloquear o feed
+        // e uma data posterior ainda pode ser inserida antes dos itens sem data já exibidos.
+        let unknown = (undatedPages[sourceId] ?? 0) < Self.undatedLookaheadPages ? Date.distantFuture : .distantPast
+        frontier[sourceId] = hasMore ? (oldest[sourceId] ?? unknown) : nil
     }
 
     /// A fonte não tem mais páginas (acabou ou falhou).
@@ -71,15 +77,9 @@ struct LatestMerge {
         !frontier.contains { $0.value > entry.sortDate }
     }
 
-    private mutating func sortDate(for item: SourceMangaItem, sourceId: String) -> Date {
-        if let date = item.latestChapterDate {
-            lastRealDate[sourceId] = min(date, now)
-            return min(date, now)
-        }
-        if let previous = lastRealDate[sourceId] { return previous }
-        let rank = undatedCount[sourceId, default: 0]
-        undatedCount[sourceId] = rank + 1
-        return now.addingTimeInterval(-Self.undatedOffset - Double(rank) * 3600)
+    private func sortDate(for item: SourceMangaItem) -> Date {
+        guard let date = item.latestChapterDate, date <= now else { return .distantPast }
+        return date
     }
 
     /// Insere mantendo a ordem (empates ficam na ordem de chegada).

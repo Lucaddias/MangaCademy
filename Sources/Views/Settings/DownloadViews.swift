@@ -155,14 +155,14 @@ struct StorageView: View {
         List {
             Section {
                 LabeledContent("Downloads", value: format(total))
-                LabeledContent("Cache de capítulos", value: "\(chapterCacheCount) de \(ChapterPageCache.shared.limit) · \(format(chapterCacheSize))")
+                LabeledContent("Cache de capítulos", value: "\(chapterCacheCount) capítulos · \(format(chapterCacheSize))")
                 LabeledContent("Cache de capas", value: format(cacheSize))
                 Button("Limpar cache de imagens") {
                     ImageCache.shared.clearCache()
                     refresh()
                 }
             } footer: {
-                Text("O cache guarda as páginas dos últimos \(ChapterPageCache.shared.limit) capítulos lidos e apaga os mais antigos sozinho. Capítulos baixados não contam.")
+                Text("O cache remove páginas temporárias conforme o progresso da leitura. Downloads permanecem no aparelho.")
             }
             if !rows.isEmpty {
                 Section("Por obra") {

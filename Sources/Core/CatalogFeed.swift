@@ -23,6 +23,8 @@ public final class CatalogFeed {
     // MARK: Estado observado pela interface
 
     public private(set) var works: [UnifiedWork] = []
+    /// Verifica dados locais antes de combinar identidades do catálogo.
+    public var canMergeIdentities: (Set<String>) -> IdentityMergeDecision = { _ in .deny }
     public private(set) var isExhausted = false
     public private(set) var inFlight = 0
     public private(set) var totalSources = 0
@@ -65,12 +67,17 @@ public final class CatalogFeed {
         let item: SourceMangaItem
         let source: MangaSource
         let key: String
+        let searchRank: Int
     }
 
     private var merger = WorkMerger()
     private var queue: [Cursor] = []
     private var queueHead = 0
     private var generation = 0
+    private var pageTasks: [UUID: Task<Void, Never>] = [:]
+    private var enrichmentTasks: [UUID: Task<Void, Never>] = [:]
+    private var publishTask: Task<Void, Never>?
+    private let injectedSources: [MangaSource]?
     private var targetCount = 0
     private var includeNsfw = false
     private var blockAdult = true
@@ -103,22 +110,33 @@ public final class CatalogFeed {
     private let prefetchDistance = 15
     private let maxConcurrent = 8
     private let maxConcurrentLatest = 12
-    private let maxSearchPagesPerSource = 3
     private let maxEnrich = 16
     private let maxEnrichPerSource = 4
+    /// Novas páginas só são pedidas enquanto a fila de enriquecimento estiver abaixo deste valor.
+    /// Respostas já em voo podem ultrapassar o limite por até oito páginas.
+    private let maxEnrichmentBacklog = 96
     private let metadataTimeout: Double = 12
 
-    public init() {}
+    public init() { injectedSources = nil }
+
+    /// Permite exercitar o agendamento com fontes controladas em testes.
+    init(testSources: [MangaSource]) { injectedSources = testSources }
 
     /// Reinicia o feed (troca de filtro, modo, busca, fonte ou do filtro de conteúdo adulto).
     public func reset(filter: LanguageFilter, mode: Mode, includeNsfw: Bool, sourceId: String? = nil) {
+        pageTasks.values.forEach { $0.cancel() }
+        pageTasks.removeAll()
+        enrichmentTasks.values.forEach { $0.cancel() }
+        enrichmentTasks.removeAll()
+        publishTask?.cancel()
+        publishTask = nil
         generation += 1
         self.filter = filter
         self.sourceId = sourceId
         self.mode = mode
         self.includeNsfw = includeNsfw
         blockAdult = Preferences.blockAdultTags
-        merger = WorkMerger()
+        merger = WorkMerger(canMergeIdentities: canMergeIdentities)
         works = []
         isExhausted = false
         inFlight = 0
@@ -143,7 +161,7 @@ public final class CatalogFeed {
         loadedCount = 0
         matchingCount = 0
 
-        var sources = SourceHealth.prioritized(SourceManager.shared.catalogSources(for: filter, includeNsfw: includeNsfw))
+        var sources = injectedSources ?? SourceHealth.prioritized(SourceManager.shared.catalogSources(for: filter, includeNsfw: includeNsfw))
         if let sourceId { sources = sources.filter { $0.id == sourceId } }
         sourcesById = Dictionary(sources.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         queue = sources.map(Cursor.init)
@@ -177,7 +195,7 @@ public final class CatalogFeed {
     }
 
     public func retry() {
-        reset(filter: filter, mode: mode, includeNsfw: includeNsfw)
+        reset(filter: filter, mode: mode, includeNsfw: includeNsfw, sourceId: sourceId)
     }
 
     // MARK: - Motor
@@ -199,13 +217,19 @@ public final class CatalogFeed {
             return
         }
         // Itens ainda em verificação contam para a meta: evita baixar páginas demais de uma vez
-        while inFlight < maxConcurrent, needsMore, let cursor = dequeue() {
+        while inFlight < maxConcurrent, unverifiedCount < maxEnrichmentBacklog,
+              (needsMore || hasUnqueriedSearchSource), let cursor = dequeue() {
             launch(cursor)
         }
         verifyingCount = unverifiedCount
         if inFlight == 0 && pendingCount == 0 && unverifiedCount == 0 {
             isExhausted = true
         }
+    }
+
+    private var hasUnqueriedSearchSource: Bool {
+        guard case .search = mode, queueHead < queue.count else { return false }
+        return queue[queueHead].nextPage == 1
     }
 
     private func dequeue() -> Cursor? {
@@ -271,7 +295,8 @@ public final class CatalogFeed {
         let page = cursor.nextPage
         let mode = self.mode
         let source = cursor.source
-        Task {
+        let taskId = UUID()
+        pageTasks[taskId] = Task {
             let result: Result<SourceMangaPage, Error>
             do {
                 let pageResult: SourceMangaPage
@@ -284,6 +309,7 @@ public final class CatalogFeed {
             } catch {
                 result = .failure(error)
             }
+            self.pageTasks[taskId] = nil
             self.finish(cursor, page: page, result: result, generation: gen)
         }
     }
@@ -309,7 +335,6 @@ public final class CatalogFeed {
             }
             // Página sem itens novos = a fonte repetiu a última página: acabou
             keepGoing = pageResult.hasNextPage && !fresh.isEmpty
-            if case .search = mode, page >= maxSearchPagesPerSource { keepGoing = false }
             cursor.nextPage = page + 1
             if mode == .latest {
                 latestMerge.add(fresh, from: cursor.source.id, hasMore: keepGoing, keep: isRelevant)
@@ -349,23 +374,26 @@ public final class CatalogFeed {
     private func ingest(_ item: SourceMangaItem, source: MangaSource) {
         guard !merger.contains(refId: item.id) else { return }
         let adultSource = SourceManager.shared.isNsfw(source.id)
-        // Mesmo título de uma obra já conhecida: funde direto
-        if merger.exactMatch(for: item) != nil {
-            merger.add(item, sourceName: source.name, adultSource: adultSource)
-            return
-        }
         // Já verificada antes (cache de 14 dias)
         if let cached = MetadataCache.shared.entry(for: item.id) {
             var enriched = item
             enriched.altTitles = Self.unique(item.altTitles + cached.altTitles)
             enriched.genres = Self.unique(item.genres + cached.genres)
+            // O cache só recebe resultados com metadados completos (ver finishEnrichment).
+            enriched.hasFullMetadata = true
             if enriched.coverUrl == nil { enriched.coverUrl = cached.coverUrl }
             let hash = cached.coverUrl == enriched.coverUrl ? cached.hash : nil
             merger.add(enriched, sourceName: source.name, coverHash: hash, adultSource: adultSource)
             return
         }
         let key = TitleKey.normalize(item.title)
-        let entry = Pending(item: item, source: source, key: key)
+        let rank: Int
+        if case .search(let query) = mode {
+            rank = Self.searchRank(title: item.title, aliases: TitleKey.keys(for: item.altTitles), query: query)
+        } else {
+            rank = 0
+        }
+        let entry = Pending(item: item, source: source, key: key, searchRank: rank)
         if !key.isEmpty && verifyingKeys.contains(key) {
             waitingByKey[key, default: []].append(entry)
             waitingCount += 1
@@ -376,15 +404,24 @@ public final class CatalogFeed {
     }
 
     private func pumpEnrichment() {
-        var index = 0
-        while enrichInFlight < maxEnrich, index < pending.count {
+        while enrichInFlight < maxEnrich {
+            let eligible = pending.indices.filter { index in
+                let entry = pending[index]
+                return entry.item.hasFullMetadata || enrichBySource[entry.source.id, default: 0] < maxEnrichPerSource
+            }
+            guard !eligible.isEmpty else { break }
+            let index: Int
+            if case .search = mode {
+                index = eligible.min { a, b in
+                    let ra = pending[a].searchRank
+                    let rb = pending[b].searchRank
+                    return ra == rb ? a < b : ra < rb
+                }!
+            } else {
+                index = eligible[0]
+            }
             let entry = pending[index]
             let needsMetadata = !entry.item.hasFullMetadata
-            // Limite por site para não sobrecarregar (nem levar bloqueio de) uma fonte só
-            if needsMetadata && enrichBySource[entry.source.id, default: 0] >= maxEnrichPerSource {
-                index += 1
-                continue
-            }
             pending.remove(at: index)
             launchEnrichment(entry, needsMetadata: needsMetadata)
         }
@@ -396,8 +433,11 @@ public final class CatalogFeed {
         if needsMetadata { enrichBySource[entry.source.id, default: 0] += 1 }
         let gen = generation
         let timeout = metadataTimeout
-        Task {
+        let taskId = UUID()
+        enrichmentTasks[taskId] = Task {
             let result = await Self.enrich(entry.item, source: entry.source, fetchMetadata: needsMetadata, timeout: timeout)
+            self.enrichmentTasks[taskId] = nil
+            guard !Task.isCancelled else { return }
             self.finishEnrichment(entry, needsMetadata: needsMetadata, result: result, generation: gen)
         }
     }
@@ -410,6 +450,7 @@ public final class CatalogFeed {
 
     /// Busca o que falta da obra (fora da thread principal).
     nonisolated private static func enrich(_ item: SourceMangaItem, source: MangaSource, fetchMetadata: Bool, timeout: Double) async -> Enrichment {
+        guard !Task.isCancelled else { return Enrichment(item: item, coverHash: nil, complete: false) }
         let referer = source.imageReferer
         async let listingHash = CoverFingerprint.hash(urlString: item.coverUrl, referer: referer)
         var detail: SourceMangaDetail?
@@ -423,7 +464,7 @@ public final class CatalogFeed {
             enriched.hasFullMetadata = true
         }
         var hash = await listingHash
-        if hash == nil, item.coverUrl == nil, let cover = detail?.coverUrl {
+        if !Task.isCancelled, hash == nil, item.coverUrl == nil, let cover = detail?.coverUrl {
             enriched.coverUrl = cover
             hash = await CoverFingerprint.hash(urlString: cover, referer: referer)
         }
@@ -467,9 +508,10 @@ public final class CatalogFeed {
         guard !publishScheduled else { return }
         publishScheduled = true
         let gen = generation
-        Task {
-            try? await Task.sleep(nanoseconds: 150_000_000)
+        publishTask = Task {
+            do { try await Task.sleep(nanoseconds: 150_000_000) } catch { return }
             guard gen == self.generation else { return }
+            self.publishTask = nil
             self.publishScheduled = false
             self.publish()
             self.pump()
@@ -494,8 +536,37 @@ public final class CatalogFeed {
             list = list.filter { GenreTags.matches($0.genres, all: tagFilter) }
         }
         matchingCount = list.count
-        works = mode == .latest ? sortedByLatest(list) : list
+        switch mode {
+        case .latest: works = sortedByLatest(list)
+        case .search(let query): works = Self.sortedSearchResults(list, query: query)
+        case .popular: works = list
+        }
         verifyingCount = unverifiedCount
+    }
+
+    /// Correspondências no título exibido vêm antes dos títulos alternativos;
+    /// empates preservam a ordem em que as fontes retornaram os resultados.
+    static func sortedSearchResults(_ list: [UnifiedWork], query: String) -> [UnifiedWork] {
+        guard !TitleKey.normalize(query).isEmpty else { return list }
+        let ranks = list.map { searchRank(title: $0.title, aliases: $0.titleKeys, query: query) }
+        return list.indices.sorted { ranks[$0] == ranks[$1] ? $0 < $1 : ranks[$0] < ranks[$1] }.map { list[$0] }
+    }
+
+    private static func searchRank(title: String, aliases: Set<String>, query: String) -> Int {
+        let normalizedQuery = TitleKey.normalize(query)
+        guard !normalizedQuery.isEmpty else { return 8 }
+        func quality(_ title: String) -> Int? {
+            guard !title.isEmpty else { return nil }
+            if title == normalizedQuery { return 0 }
+            if title.hasPrefix(normalizedQuery + " ") { return 1 }
+            let words = Set(title.split(separator: " "))
+            let queryWords = normalizedQuery.split(separator: " ")
+            if queryWords.allSatisfy({ words.contains($0) }) { return 2 }
+            if title.contains(normalizedQuery) { return 3 }
+            return nil
+        }
+        if let primary = quality(TitleKey.normalize(title)) { return primary }
+        return aliases.compactMap(quality).min().map { $0 + 4 } ?? 8
     }
 
     /// Do capítulo mais novo para o mais antigo (empates na ordem de chegada).

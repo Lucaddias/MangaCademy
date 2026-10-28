@@ -4,6 +4,7 @@ import SwiftData
 /// Catálogo unificado de todas as fontes Keiyoushi com motor iOS, em todos os idiomas, ou de uma fonte só
 /// (menu do título). O idioma preferido (Ajustes) só decide a ordem dos selos de idioma.
 public struct BrowseView: View {
+    @Environment(\.modelContext) private var modelContext
     @AppStorage(Preferences.Key.languageFilter) private var filterRaw: String = Preferences.Default.languageFilter.rawValue
     @AppStorage(Preferences.Key.showNsfwSources) private var showNsfw = Preferences.Default.showNsfwSources
     @AppStorage(Preferences.Key.blockAdultTags) private var blockAdult = Preferences.Default.blockAdultTags
@@ -351,6 +352,10 @@ public struct BrowseView: View {
     }
 
     private func reload() {
+        let safety = LocalIdentitySafety.Gate(context: modelContext)
+        feed.canMergeIdentities = { identities in
+            safety.decide(identities)
+        }
         let mode: CatalogFeed.Mode
         if let activeQuery {
             mode = .search(activeQuery)
