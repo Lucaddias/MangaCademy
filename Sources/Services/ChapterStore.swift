@@ -237,7 +237,11 @@ enum ChapterStore {
     }
 
     static func refreshUnreadCount(manga: Manga, context: ModelContext) {
-        let count = unreadCount(records(mangaId: manga.id, context: context), language: manga.preferredLanguage)
+        refreshUnreadCount(manga: manga, records: records(mangaId: manga.id, context: context))
+    }
+
+    static func refreshUnreadCount(manga: Manga, records: [Chapter]) {
+        let count = unreadCount(records, language: manga.preferredLanguage)
         if manga.unreadCount != count { manga.unreadCount = count }
     }
 
