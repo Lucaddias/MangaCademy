@@ -32,8 +32,15 @@ public final class ImageDiskStore: @unchecked Sendable {
         try? data.write(to: path(for: urlString), options: .atomic)
     }
 
+    private func inFlightKey(urlString: String, referer: String?) -> String {
+        "\(urlString)\n\(referer ?? "")"
+    }
+
     public func remove(_ urlString: String) {
-        inFlightLock.withLock { _ = inFlight.removeValue(forKey: urlString) }
+        inFlightLock.withLock {
+            let prefix = "\(urlString)\n"
+            inFlight = inFlight.filter { $0.key != urlString && !$0.key.hasPrefix(prefix) }
+        }
         try? FileManager.default.removeItem(at: path(for: urlString))
     }
 
@@ -50,8 +57,9 @@ public final class ImageDiskStore: @unchecked Sendable {
         // Páginas baixadas e da Fonte Local já estão no aparelho.
         if url.isFileURL { return try? Data(contentsOf: url) }
 
+        let key = inFlightKey(urlString: urlString, referer: referer)
         let task: Task<Data?, Never> = inFlightLock.withLock {
-            if let existing = inFlight[urlString] {
+            if let existing = inFlight[key] {
                 return existing
             }
             if let cached = data(for: urlString) {
@@ -60,7 +68,7 @@ public final class ImageDiskStore: @unchecked Sendable {
             let newTask = Task.detached(priority: .userInitiated) { [self] () -> Data? in
                 defer {
                     self.inFlightLock.withLock {
-                        _ = self.inFlight.removeValue(forKey: urlString)
+                        _ = self.inFlight.removeValue(forKey: key)
                     }
                 }
                 var req = URLRequest(url: url, timeoutInterval: 20)
@@ -76,7 +84,7 @@ public final class ImageDiskStore: @unchecked Sendable {
                 self.store(data, for: urlString)
                 return data
             }
-            inFlight[urlString] = newTask
+            inFlight[key] = newTask
             return newTask
         }
         return await task.value

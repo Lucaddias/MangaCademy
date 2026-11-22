@@ -96,6 +96,7 @@ public struct ReaderView: View {
     @State private var showChapterDrawer = false
     @State private var showSettingsSheet = false
     @State private var showInfoSheet = false
+    @State private var prefetchTask: Task<Void, Never>?
 
     public init(
         mangaId: String,
@@ -350,6 +351,8 @@ public struct ReaderView: View {
             AutoDownloader.downloadAhead(from: index, in: allChapters, mangaId: mangaId, mangaTitle: mangaTitle, context: modelContext)
         }
         .onDisappear {
+            prefetchTask?.cancel()
+            prefetchTask = nil
             saveProgress()
             AutoDownloader.deleteRead(
                 visitedChapters.filter(allChapters.indices.contains).map { allChapters[$0] },
@@ -792,6 +795,8 @@ public struct ReaderView: View {
     private func openChapter(_ index: Int, atLastPage: Bool = false) async {
         // Ao trocar de capítulo, guarda onde o anterior parou.
         saveProgress()
+        prefetchTask?.cancel()
+        prefetchTask = nil
         guard allChapters.indices.contains(index) else {
             errorMessage = "Capítulo indisponível"
             isLoading = false
@@ -879,12 +884,18 @@ public struct ReaderView: View {
 
     /// Baixa para o disco as próximas páginas antes de chegar nelas.
     private func prefetchAhead() {
+        prefetchTask?.cancel()
+        prefetchTask = nil
         guard settings.preloadCount > 0, !settings.preloadOnlyOnWifi || NetworkMonitor.shared.isOnWifi else { return }
         let all = items
         guard let current = currentItem, let index = all.firstIndex(of: current) else { return }
-        let upcoming = all.dropFirst(index + 1).compactMap(\.page).prefix(settings.preloadCount)
-        Task {
+        let upcoming = all.dropFirst(index + 1).compactMap(\.page).prefix(settings.preloadCount).filter { page in
+            URL(string: page.imageUrl)?.isFileURL == false
+        }
+        guard !upcoming.isEmpty else { return }
+        prefetchTask = Task {
             for page in upcoming {
+                guard !Task.isCancelled else { break }
                 await ImageCache.shared.prefetch(urlString: page.imageUrl, referer: page.referer)
             }
         }
