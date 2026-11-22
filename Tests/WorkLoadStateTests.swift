@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import MihonReader
 
@@ -57,5 +58,100 @@ struct WorkLoadStateTests {
         state.addFailure("A: fora do ar")
         #expect(state.failures == ["A: fora do ar"])
         #expect(state.mergedDetail(filter: .all) == nil)
+    }
+
+    @MainActor
+    @Test func detailModelSeedsLocalSnapshotAndReplacesWithRemoteSafely() {
+        let refA = WorkSourceRef(sourceId: "a", sourceName: "A", remoteUrl: "/a", title: "Obra", coverUrl: nil, languages: ["pt-BR"])
+        let refB = WorkSourceRef(sourceId: "b", sourceName: "B", remoteUrl: "/b", title: "Obra", coverUrl: nil, languages: ["en"])
+        var work = UnifiedWork(ref: refA)
+        work.merge(ref: refB, altTitles: [])
+
+        let model = WorkDetailModel(work: work)
+        let mangaId = work.id
+
+        let validPt = Chapter(mangaId: mangaId, remoteUrl: "/a/1", name: "Cap. 1", chapterNumber: 1, orderIndex: 0, sourceId: "a", language: "pt-BR", mangaRemoteUrl: "/a")
+        validPt.dateFetch = Date()
+        let validEn = Chapter(mangaId: mangaId, remoteUrl: "/b/1", name: "Ch. 1", chapterNumber: 1, orderIndex: 0, sourceId: "b", language: "en", mangaRemoteUrl: "/b")
+        validEn.dateFetch = Date()
+        let missingDateFetch = Chapter(mangaId: mangaId, remoteUrl: "/a/2", name: "Cap. 2", chapterNumber: 2, orderIndex: 1, sourceId: "a", language: "pt-BR", mangaRemoteUrl: "/a")
+        let otherManga = Chapter(mangaId: "other:/x", remoteUrl: "/a/9", name: "Cap. 9", chapterNumber: 9, orderIndex: 0, sourceId: "a", language: "pt-BR", mangaRemoteUrl: "/a")
+        otherManga.dateFetch = Date()
+        let detachedSource = Chapter(mangaId: mangaId, remoteUrl: "/c/3", name: "Cap. 3", chapterNumber: 3, orderIndex: 0, sourceId: "c", language: "pt-BR", mangaRemoteUrl: "/c")
+        detachedSource.dateFetch = Date()
+
+        model.seedLocalSnapshot(
+            records: [validPt, validEn, missingDateFetch, otherManga, detachedSource],
+            mangaId: mangaId,
+            filter: .portuguese,
+            savedLanguage: "pt-BR"
+        )
+
+        #expect(!model.hasRemoteChapters)
+        #expect(!model.canPersistSelectedLanguage)
+        #expect(model.selectedLanguage == "pt-BR")
+        #expect(model.chapters.map(\.remoteUrl) == ["/a/1"])
+        #expect(model.chaptersByLanguage["en"]?.map(\.remoteUrl) == ["/b/1"])
+
+        // Resposta parcial de outra fonte ("en") enquanto a preferida ("pt-BR") ainda está pendente.
+        var loadState = WorkLoadState(work: work)
+        loadState.add(
+            ref: refB,
+            sourceLanguage: "en",
+            detail: SourceMangaDetail(remoteUrl: "/b", title: "Obra"),
+            chapters: [chapter(2, language: "en")]
+        )
+        model.apply(state: loadState, pendingSources: 1)
+
+        #expect(model.selectedLanguage == "pt-BR")
+        #expect(!model.canPersistSelectedLanguage)
+        #expect(model.chapters.map(\.remoteUrl) == ["/a/1"])
+        #expect(model.chaptersByLanguage["en"]?.map(\.remoteUrl) == ["/cap-2.0"])
+
+        // Resposta completa da fonte preferida substitui os capítulos locais pelos remotos.
+        loadState.add(
+            ref: refA,
+            sourceLanguage: "pt-BR",
+            detail: SourceMangaDetail(remoteUrl: "/a", title: "Obra"),
+            chapters: [chapter(10, language: "pt-BR")]
+        )
+        model.apply(state: loadState, pendingSources: 0)
+
+        #expect(model.hasRemoteChapters)
+        #expect(model.selectedLanguage == "pt-BR")
+        #expect(model.chapters.map(\.remoteUrl) == ["/cap-10.0"])
+    }
+
+    @MainActor
+    @Test func detailModelPreservesLocalSnapshotWhenRemoteFails() {
+        let refA = WorkSourceRef(sourceId: "a", sourceName: "A", remoteUrl: "/a", title: "Obra", coverUrl: nil, languages: ["pt-BR"])
+        let refB = WorkSourceRef(sourceId: "b", sourceName: "B", remoteUrl: "/b", title: "Obra", coverUrl: nil, languages: ["en"])
+        var work = UnifiedWork(ref: refA)
+        work.merge(ref: refB, altTitles: [])
+
+        let model = WorkDetailModel(work: work)
+        let saved = Chapter(mangaId: work.id, remoteUrl: "/a/1", name: "Cap. 1", chapterNumber: 1, orderIndex: 0, sourceId: "a", language: "pt-BR", mangaRemoteUrl: "/a")
+        saved.dateFetch = Date()
+
+        model.seedLocalSnapshot(records: [saved], mangaId: work.id, filter: .portuguese, savedLanguage: "pt-BR")
+
+        // Fonte "en" responde parcialmente enquanto "pt-BR" pendente, mesmo sem capítulos locais em "pt-BR" ou com falha final.
+        var failedState = WorkLoadState(work: work)
+        failedState.addFailure("A: fora do ar")
+        model.apply(state: failedState, pendingSources: 0)
+
+        #expect(!model.hasRemoteChapters)
+        #expect(model.selectedLanguage == "pt-BR")
+        #expect(model.chapters.map(\.remoteUrl) == ["/a/1"])
+
+        // Também preserva o idioma salvo se apenas outra fonte responder enquanto a preferida está pendente, sem snapshot local em "pt-BR".
+        let pendingOnlyModel = WorkDetailModel(work: work)
+        pendingOnlyModel.seedLocalSnapshot(records: [], mangaId: work.id, filter: .portuguese, savedLanguage: "pt-BR")
+        var partialOther = WorkLoadState(work: work)
+        partialOther.add(ref: refB, sourceLanguage: "en", detail: SourceMangaDetail(remoteUrl: "/b", title: "Obra"), chapters: [chapter(1, language: "en")])
+        pendingOnlyModel.apply(state: partialOther, pendingSources: 1)
+
+        #expect(pendingOnlyModel.selectedLanguage == "pt-BR")
+        #expect(!pendingOnlyModel.canPersistSelectedLanguage)
     }
 }

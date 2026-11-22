@@ -27,6 +27,14 @@ final class WorkDetailModel {
     private var userPickedLanguage = false
     private var filter: LanguageFilter = .all
     private var savedLanguage: String?
+    private var localChapters: [SourceChapterItem] = []
+    private var remoteChapters: [SourceChapterItem] = []
+    private var loadedSourceCount = 0
+
+    var hasRemoteChapters: Bool { !remoteChapters.isEmpty }
+    var canPersistSelectedLanguage: Bool {
+        userPickedLanguage || (!isLoading && hasLoaded && hasRemoteChapters)
+    }
 
     init(work: UnifiedWork) {
         self.work = work
@@ -62,12 +70,40 @@ final class WorkDetailModel {
         selectedLanguage = language
     }
 
+    func seedLocalSnapshot(
+        records: [Chapter],
+        mangaId: String,
+        filter: LanguageFilter,
+        savedLanguage: String?
+    ) {
+        self.filter = filter
+        if let savedLanguage, !userPickedLanguage {
+            self.savedLanguage = savedLanguage
+            self.selectedLanguage = savedLanguage
+        }
+        var snapshot: [SourceChapterItem] = []
+        for record in records where record.mangaId == mangaId && record.dateFetch != nil {
+            let raw = ChapterStore.item(from: record)
+            guard let ref = matchingRef(for: raw) else { continue }
+            let sourceLang = SourceManager.shared.getSource(id: ref.sourceId)?.language
+                ?? (ref.languages.count == 1 ? ref.languages[0] : "all")
+            if let normalized = WorkLoadState.normalize([raw], ref: ref, sourceLanguage: sourceLang).first {
+                snapshot.append(normalized)
+            }
+        }
+        localChapters = snapshot
+        regroup()
+    }
+
     func load(filter: LanguageFilter, savedLanguage: String?) async {
         guard !hasLoaded else { return }
         hasLoaded = true
         self.filter = filter
-        self.savedLanguage = savedLanguage
-        if let savedLanguage { selectedLanguage = savedLanguage; userPickedLanguage = true }
+        if let savedLanguage {
+            self.savedLanguage = savedLanguage
+            if !userPickedLanguage { selectedLanguage = savedLanguage }
+        }
+        regroup()
 
         let loader = WorkLoader(work: work, filter: filter)
         loader.onUpdate = { [weak self] loader in self?.apply(loader) }
@@ -77,9 +113,9 @@ final class WorkDetailModel {
     func reload() async {
         hasLoaded = false
         failures = []
-        rawChapters = []
-        chaptersByLanguage = [:]
-        languages = []
+        remoteChapters = []
+        loadedSourceCount = 0
+        regroup()
         await load(filter: filter, savedLanguage: userPickedLanguage ? selectedLanguage : savedLanguage)
     }
 
@@ -104,12 +140,16 @@ final class WorkDetailModel {
     }
 
     private func apply(_ loader: WorkLoader) {
-        let state = loader.state
-        pendingSources = loader.pendingSources
+        apply(state: loader.state, pendingSources: loader.pendingSources)
+    }
+
+    func apply(state: WorkLoadState, pendingSources: Int) {
+        self.pendingSources = pendingSources
+        self.loadedSourceCount = state.loadedSourceCount
         work = state.work
         failures = state.failures
         blockedRefs = state.blockedRefs
-        rawChapters = state.chapters
+        remoteChapters = state.chapters
         regroup()
 
         if let merged = state.mergedDetail(filter: filter) {
@@ -118,12 +158,42 @@ final class WorkDetailModel {
         }
     }
 
+    private func matchingRef(for item: SourceChapterItem) -> WorkSourceRef? {
+        work.refs.first { ref in
+            ref.sourceId == item.sourceId && (item.mangaRemoteUrl.isEmpty || ref.remoteUrl == item.mangaRemoteUrl)
+        }
+    }
+
+    private func isAttached(_ item: SourceChapterItem) -> Bool {
+        matchingRef(for: item) != nil
+    }
+
+    private var effectiveRawChapters: [SourceChapterItem] {
+        let validLocal = localChapters.filter(isAttached)
+        if remoteChapters.isEmpty {
+            if loadedSourceCount > 0 && pendingSources == 0 && failures.isEmpty {
+                return []
+            }
+            return validLocal
+        }
+        if pendingSources > 0 {
+            let loadedSources = Set(remoteChapters.map(\.sourceId))
+            let pendingLocal = validLocal.filter { !loadedSources.contains($0.sourceId) }
+            return remoteChapters + pendingLocal
+        }
+        return remoteChapters
+    }
+
     private func regroup() {
+        rawChapters = effectiveRawChapters
         let visible = rawChapters.filter { !ScanlatorFilter.isExcluded($0, excluded: excluded) }
         chaptersByLanguage = SourceAggregator.shared.chaptersByLanguage(visible, preferredSourceId: preferredSourceId)
         languages = SourceAggregator.shared.sortedLanguages(chaptersByLanguage, filter: filter)
-        if let selectedLanguage, userPickedLanguage, chaptersByLanguage[selectedLanguage] != nil {
-            // mantém a escolha do usuário
+        let preferred = userPickedLanguage ? selectedLanguage : savedLanguage
+        if let preferred, chaptersByLanguage[preferred] != nil {
+            selectedLanguage = preferred
+        } else if let preferred, pendingSources > 0 {
+            selectedLanguage = preferred
         } else {
             selectedLanguage = languages.first
         }
@@ -344,10 +414,27 @@ public struct MangaDetailView: View {
                 model.excluded = Set(localManga.excludedScanlators)
                 model.preferredSourceId = localManga.preferredSourceId
             }
+            model.seedLocalSnapshot(
+                records: chapterStates,
+                mangaId: progressId,
+                filter: filter,
+                savedLanguage: localManga?.preferredLanguage
+            )
             await model.load(filter: filter, savedLanguage: localManga?.preferredLanguage)
             syncLibrary()
         }
+        .onChange(of: chapterStates.count) { _, _ in
+            if !model.hasRemoteChapters {
+                model.seedLocalSnapshot(
+                    records: chapterStates,
+                    mangaId: progressId,
+                    filter: filter,
+                    savedLanguage: localManga?.preferredLanguage
+                )
+            }
+        }
         .onChange(of: model.selectedLanguage) { _, newValue in
+            guard model.canPersistSelectedLanguage else { return }
             if let local = localManga, let newValue, local.preferredLanguage != newValue {
                 local.preferredLanguage = newValue
                 ChapterStore.refreshUnreadCount(manga: local, context: modelContext)
@@ -1075,7 +1162,7 @@ public struct MangaDetailView: View {
 
     /// Obras da biblioteca guardam a lista de capítulos (base para não lidos e novidades).
     private func saveChapterList(of manga: Manga) {
-        guard manga.isFavorite, !model.isLoading, !model.chaptersByLanguage.isEmpty else { return }
+        guard manga.isFavorite, !model.isLoading, model.hasRemoteChapters, !model.chaptersByLanguage.isEmpty else { return }
         ChapterStore.sync(model.chaptersByLanguage, manga: manga, context: modelContext)
     }
 
