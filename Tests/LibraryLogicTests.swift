@@ -76,6 +76,46 @@ struct LibraryLogicTests {
         #expect(flags.displayName(chapters[0]) == "Capítulo 4")
     }
 
+    @Test func chapterFlagsEvaluateDownloadedOnlyWhenNeeded() {
+        let chapters = (1...5).reversed().map {
+            SourceChapterItem(remoteUrl: "/\($0)", name: "Cap \($0)", chapterNumber: Double($0), orderIndex: 5 - $0, sourceId: "s")
+        }
+        var readChecks = 0
+        var bookmarkChecks = 0
+        var downloadChecks = 0
+        var flags = ChapterListFlags()
+        flags.unread = .include
+        flags.bookmarked = .include
+
+        let ignoredResult = flags.apply(
+            chapters,
+            isRead: { _ in readChecks += 1; return false },
+            isBookmarked: { chapter in bookmarkChecks += 1; return Int(chapter.chapterNumber) % 2 == 0 },
+            isDownloaded: { _ in downloadChecks += 1; return false }
+        )
+
+        #expect(ignoredResult.map(\.chapterNumber) == [4, 2])
+        #expect(readChecks == 5)
+        #expect(bookmarkChecks == 5)
+        #expect(downloadChecks == 0)
+
+        flags.downloaded = .include
+        readChecks = 0
+        bookmarkChecks = 0
+        downloadChecks = 0
+        let activeResult = flags.apply(
+            chapters,
+            isRead: { _ in readChecks += 1; return false },
+            isBookmarked: { chapter in bookmarkChecks += 1; return Int(chapter.chapterNumber) % 2 == 0 },
+            isDownloaded: { chapter in downloadChecks += 1; return chapter.chapterNumber == 4 }
+        )
+
+        #expect(activeResult.map(\.chapterNumber) == [4])
+        #expect(readChecks == 5)
+        #expect(bookmarkChecks == 5)
+        #expect(downloadChecks == 2)
+    }
+
     @Test func scanlatorExclusion() {
         let chapter = SourceChapterItem(remoteUrl: "/1", name: "1", chapterNumber: 1, orderIndex: 0, scanlator: "Scan A & Scan B", sourceId: "ky-9")
         #expect(ScanlatorFilter.isExcluded(chapter, excluded: ["Scan B"]))

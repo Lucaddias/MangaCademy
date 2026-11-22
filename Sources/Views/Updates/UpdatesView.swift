@@ -37,6 +37,10 @@ enum UpdatesFeed {
     @MainActor
     static func items(records: [Chapter], favorites: [Manga]) -> [UpdateItem] {
         let byId = Dictionary(favorites.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let excludedByMangaId = Dictionary(
+            byId.map { ($0.key, Set($0.value.excludedScanlators)) },
+            uniquingKeysWith: { first, _ in first }
+        )
         var seen = Set<String>()
         var readKeys = Set<String>()
         for record in records where record.isRead { readKeys.insert("\(record.mangaId)|\(ChapterStore.progressKey(record))") }
@@ -46,9 +50,9 @@ enum UpdatesFeed {
                   date > (manga.favoriteAt ?? .distantPast).addingTimeInterval(1) else { continue }
             if let language = manga.preferredLanguage, (record.language ?? "all") != language { continue }
             let key = "\(manga.id)|\(ChapterStore.progressKey(record))"
-            guard seen.insert(key).inserted else { continue }
             let item = ChapterStore.item(from: record)
-            if ScanlatorFilter.isExcluded(item, excluded: Set(manga.excludedScanlators)) { continue }
+            if ScanlatorFilter.isExcluded(item, excluded: excludedByMangaId[manga.id] ?? []) { continue }
+            guard seen.insert(key).inserted else { continue }
             result.append(UpdateItem(chapter: item, manga: manga, date: date, isRead: record.isRead || readKeys.contains(key)))
         }
         return result
@@ -80,12 +84,16 @@ struct UpdatesView: View {
 
     private var items: [UpdateItem] {
         _ = downloadVersion
+        let knownCategoryIDs = Set(categories.map(\.id))
+        let categoryIDsByMangaID = Dictionary(
+            favorites.map { ($0.id, Set($0.categoryIds).intersection(knownCategoryIDs)) },
+            uniquingKeysWith: { first, _ in first }
+        )
         return UpdatesFeed.items(records: records, favorites: favorites).filter { item in
             if onlyUnread && item.isRead { return false }
             if (onlyDownloaded || DownloadSettings.shared.downloadedOnly) && !DownloadStore.shared.isDownloaded(item.chapter, mangaId: item.manga.id) { return false }
             if let categoryFilter {
-                let known = Set(categories.map(\.id))
-                let mine = Set(item.manga.categoryIds).intersection(known)
+                let mine = categoryIDsByMangaID[item.manga.id] ?? []
                 return categoryFilter.isEmpty ? mine.isEmpty : mine.contains(categoryFilter)
             }
             return true

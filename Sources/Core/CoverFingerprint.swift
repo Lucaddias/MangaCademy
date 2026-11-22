@@ -15,6 +15,8 @@ public final class ImageDiskStore: @unchecked Sendable {
     public let coverLimit: Int64
     public let chapters: ChapterPageCache
     private let fm = FileManager.default
+    private let inFlightLock = NSLock()
+    private var inFlight: [String: Task<Data?, Never>] = [:]
 
     public init(directory: URL? = nil, coverLimit: Int64 = 150 * 1024 * 1024, chapters: ChapterPageCache = .shared) {
         let base = directory ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
@@ -45,8 +47,21 @@ public final class ImageDiskStore: @unchecked Sendable {
         try? data.write(to: path(for: urlString), options: .atomic)
     }
 
+    private func inFlightKey(urlString: String, referer: String?) -> String {
+        "\(urlString)\n\(referer ?? "")"
+    }
+
+    public func remove(_ urlString: String) {
+        inFlightLock.withLock {
+            let prefix = "\(urlString)\n"
+            inFlight = inFlight.filter { $0.key != urlString && !$0.key.hasPrefix(prefix) }
+        }
+        try? fm.removeItem(at: path(for: urlString))
+    }
+
     /// Apaga capas e páginas lidas (os downloads ficam).
     public func clear() {
+        inFlightLock.withLock { inFlight.removeAll() }
         try? fm.removeItem(at: directory)
         try? fm.createDirectory(at: directory, withIntermediateDirectories: true)
         chapters.clear()
@@ -93,29 +108,48 @@ public final class ImageDiskStore: @unchecked Sendable {
         try? fm.createDirectory(at: directory, withIntermediateDirectories: true)
     }
 
-    /// Baixa (ou lê do disco) os bytes de uma imagem.
+    /// Baixa (ou lê do disco) os bytes de uma imagem. Coalesce requisições concorrentes da mesma URL.
     public func fetch(urlString: String, referer: String?) async -> Data? {
         let registration = chapters.registration(for: urlString)
         if let cached = data(for: urlString) { return cached }
         guard let url = URL(string: urlString) else { return nil }
         // Páginas baixadas e da Fonte Local já estão no aparelho.
         if url.isFileURL { return try? Data(contentsOf: url) }
-        var req = URLRequest(url: url, timeoutInterval: 20)
-        // Servidores MangaDex@Home recusam User-Agent de navegador falsificado (respondem 404)
-        let isMangaDexHome = url.host?.hasSuffix("mangadex.network") == true
-        req.setValue(isMangaDexHome ? "MangaCademy-iOS/1.0" : HTTPClient.browserUserAgent, forHTTPHeaderField: "User-Agent")
-        req.setValue("image/avif,image/webp,image/apng,image/*,*/*;q=0.8", forHTTPHeaderField: "Accept")
-        // Muitos sites bloqueiam imagens sem o Referer do próprio domínio (anti-hotlink)
-        if let referer { req.setValue(referer, forHTTPHeaderField: "Referer") }
-        guard let (data, response) = try? await URLSession.shared.data(for: req) else { return nil }
-        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) { return nil }
-        guard !data.isEmpty else { return nil }
-        if let registration {
-            _ = chapters.store(data, for: urlString, expected: registration)
-        } else {
-            store(data, for: urlString)
+        let key = inFlightKey(urlString: urlString, referer: referer)
+        let task: Task<Data?, Never> = inFlightLock.withLock {
+            if let existing = inFlight[key] {
+                return existing
+            }
+            if let cached = data(for: urlString) {
+                return Task<Data?, Never> { cached }
+            }
+            let newTask = Task.detached(priority: .userInitiated) { [self] () -> Data? in
+                defer {
+                    self.inFlightLock.withLock {
+                        _ = self.inFlight.removeValue(forKey: key)
+                    }
+                }
+                var req = URLRequest(url: url, timeoutInterval: 20)
+                // Servidores MangaDex@Home recusam User-Agent de navegador falsificado (respondem 404)
+                let isMangaDexHome = url.host?.hasSuffix("mangadex.network") == true
+                req.setValue(isMangaDexHome ? "MangaCademy-iOS/1.0" : HTTPClient.browserUserAgent, forHTTPHeaderField: "User-Agent")
+                req.setValue("image/avif,image/webp,image/apng,image/*,*/*;q=0.8", forHTTPHeaderField: "Accept")
+                // Muitos sites bloqueiam imagens sem o Referer do próprio domínio (anti-hotlink)
+                if let referer { req.setValue(referer, forHTTPHeaderField: "Referer") }
+                guard let (data, response) = try? await URLSession.shared.data(for: req) else { return nil }
+                if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) { return nil }
+                guard !data.isEmpty else { return nil }
+                if let registration {
+                    _ = self.chapters.store(data, for: urlString, expected: registration)
+                } else {
+                    self.store(data, for: urlString)
+                }
+                return data
+            }
+            inFlight[key] = newTask
+            return newTask
         }
-        return data
+        return await task.value
     }
 }
 

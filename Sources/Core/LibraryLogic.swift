@@ -314,7 +314,9 @@ public struct ChapterListFlags: Equatable {
         isDownloaded: (SourceChapterItem) -> Bool
     ) -> [SourceChapterItem] {
         let filtered = chapters.filter {
-            unread.matches(!isRead($0)) && bookmarked.matches(isBookmarked($0)) && downloaded.matches(isDownloaded($0))
+            unread.matches(!isRead($0))
+                && bookmarked.matches(isBookmarked($0))
+                && (downloaded == .ignore || downloaded.matches(isDownloaded($0)))
         }
         let ascending: [SourceChapterItem]
         switch sort {

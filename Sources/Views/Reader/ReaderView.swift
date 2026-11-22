@@ -99,6 +99,7 @@ public struct ReaderView: View {
     @State private var showChapterDrawer = false
     @State private var showSettingsSheet = false
     @State private var showInfoSheet = false
+    @State private var prefetchTask: Task<Void, Never>?
 
     public init(
         mangaId: String,
@@ -125,11 +126,12 @@ public struct ReaderView: View {
         if let first = segments.first, let previous = previousChapterIndex(before: first.chapterIndex) {
             result.append(.previous(chapterIndex: first.chapterIndex, to: previous))
         }
+        let progress = settings.skipRead && !segments.isEmpty ? readProgress() : nil
         for (offset, segment) in segments.enumerated() {
             for page in segment.pages {
                 result.append(.page(chapterIndex: segment.chapterIndex, page: page, count: segment.pages.count))
             }
-            let next = nextChapterIndex(after: segment.chapterIndex)
+            let next = nextChapterIndex(after: segment.chapterIndex, progress: progress)
             let isLast = offset == segments.count - 1
             // Entre capítulos já carregados a leitura segue direto, salvo aviso de capítulos faltando.
             if isLast || settings.alwaysShowTransition || missingChapters(from: segment.chapterIndex, to: next) > 0 {
@@ -205,14 +207,17 @@ public struct ReaderView: View {
     /// Próximo capítulo na ordem de leitura (a lista está do mais novo para o mais antigo),
     /// pulando lidos e repetidos se o usuário pediu.
     private func nextChapterIndex(after index: Int) -> Int? {
+        nextChapterIndex(after: index, progress: settings.skipRead ? readProgress() : nil)
+    }
+
+    private func nextChapterIndex(after index: Int, progress: ChapterProgress?) -> Int? {
         guard allChapters.indices.contains(index) else { return nil }
         let current = allChapters[index]
-        let progress = (settings.skipRead || settings.skipDuplicates) ? readProgress() : nil
         var candidate = index - 1
         while candidate >= 0 {
             let chapter = allChapters[candidate]
             let duplicate = settings.skipDuplicates && chapter.chapterNumber >= 0 && chapter.chapterNumber == current.chapterNumber
-            let skipRead = settings.skipRead && progress?.isRead(chapter) == true
+            let skipRead = progress?.isRead(chapter) == true
             if !duplicate && !skipRead { return candidate }
             candidate -= 1
         }
@@ -351,6 +356,8 @@ public struct ReaderView: View {
         }
         .onDisappear {
             readerActive = false
+            prefetchTask?.cancel()
+            prefetchTask = nil
             saveProgress()
             updateCacheRetention(closing: true)
             AutoDownloader.deleteRead(
@@ -794,6 +801,8 @@ public struct ReaderView: View {
     private func openChapter(_ index: Int, atLastPage: Bool = false) async {
         // Ao trocar de capítulo, guarda onde o anterior parou.
         saveProgress()
+        prefetchTask?.cancel()
+        prefetchTask = nil
         guard allChapters.indices.contains(index) else {
             errorMessage = "Capítulo indisponível"
             isLoading = false
@@ -895,12 +904,18 @@ public struct ReaderView: View {
 
     /// Baixa para o disco as próximas páginas antes de chegar nelas.
     private func prefetchAhead() {
+        prefetchTask?.cancel()
+        prefetchTask = nil
         guard settings.preloadCount > 0, !settings.preloadOnlyOnWifi || NetworkMonitor.shared.isOnWifi else { return }
         let all = items
         guard let current = currentItem, let index = all.firstIndex(of: current) else { return }
-        let upcoming = all.dropFirst(index + 1).compactMap(\.page).prefix(settings.preloadCount)
-        Task {
+        let upcoming = all.dropFirst(index + 1).compactMap(\.page).prefix(settings.preloadCount).filter { page in
+            URL(string: page.imageUrl)?.isFileURL == false
+        }
+        guard !upcoming.isEmpty else { return }
+        prefetchTask = Task {
             for page in upcoming {
+                guard !Task.isCancelled else { break }
                 await ImageCache.shared.prefetch(urlString: page.imageUrl, referer: page.referer)
             }
         }
