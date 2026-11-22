@@ -125,13 +125,13 @@ enum ChapterStore {
                 let record: Chapter
                 if let found = byId[id] {
                     record = found
-                    record.name = item.name
-                    record.scanlator = item.scanlator
-                    record.chapterNumber = item.chapterNumber
-                    record.uploadDate = item.uploadDate
-                    record.orderIndex = item.orderIndex
-                    record.language = item.language
-                    record.mangaRemoteUrl = item.mangaRemoteUrl
+                    if record.name != item.name { record.name = item.name }
+                    if record.scanlator != item.scanlator { record.scanlator = item.scanlator }
+                    if record.chapterNumber != item.chapterNumber { record.chapterNumber = item.chapterNumber }
+                    if record.uploadDate != item.uploadDate { record.uploadDate = item.uploadDate }
+                    if record.orderIndex != item.orderIndex { record.orderIndex = item.orderIndex }
+                    if record.language != item.language { record.language = item.language }
+                    if record.mangaRemoteUrl != item.mangaRemoteUrl { record.mangaRemoteUrl = item.mangaRemoteUrl }
                     if record.dateFetch == nil { record.dateFetch = baseline }
                 } else {
                     record = Chapter(
@@ -154,9 +154,12 @@ enum ChapterStore {
                 knownKeys.insert(key)
             }
         }
-        refreshUnreadCount(manga: manga, context: context)
-        refreshStats(manga: manga, records: Array(byId.values), now: now)
-        try? context.save()
+        let allRecords = Array(byId.values)
+        refreshUnreadCount(manga: manga, records: allRecords)
+        refreshStats(manga: manga, records: allRecords, now: now)
+        if context.hasChanges {
+            try? context.save()
+        }
     }
 
     /// Números usados para ordenar a biblioteca e prever o próximo capítulo.

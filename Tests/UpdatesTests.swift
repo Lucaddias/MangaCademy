@@ -55,4 +55,19 @@ struct UpdatesTests {
         let items = UpdatesFeed.items(records: recent, favorites: [manga])
         #expect(items.map(\.chapter.name) == ["2"])
     }
+
+    @Test func excludedDuplicateDoesNotHideAllowedScanlator() {
+        let manga = Manga(sourceId: "s", remoteUrl: "/a", title: "A", isFavorite: true)
+        manga.favoriteAt = Date(timeIntervalSinceNow: -10 * 86_400)
+        manga.excludedScanlators = ["Blocked"]
+
+        let excluded = Chapter(mangaId: manga.id, remoteUrl: "/blocked", name: "Chapter 1", chapterNumber: 1, orderIndex: 0, scanlator: "Blocked", sourceId: "s")
+        excluded.dateFetch = Date()
+        let allowed = Chapter(mangaId: manga.id, remoteUrl: "/allowed", name: "Chapter 1", chapterNumber: 1, orderIndex: 1, scanlator: "Allowed", sourceId: "s")
+        allowed.dateFetch = Date()
+
+        let items = UpdatesFeed.items(records: [excluded, allowed], favorites: [manga])
+
+        #expect(items.map(\.chapter.remoteUrl) == ["/allowed"])
+    }
 }

@@ -122,11 +122,12 @@ public struct ReaderView: View {
         if let first = segments.first, let previous = previousChapterIndex(before: first.chapterIndex) {
             result.append(.previous(chapterIndex: first.chapterIndex, to: previous))
         }
+        let progress = settings.skipRead && !segments.isEmpty ? readProgress() : nil
         for (offset, segment) in segments.enumerated() {
             for page in segment.pages {
                 result.append(.page(chapterIndex: segment.chapterIndex, page: page, count: segment.pages.count))
             }
-            let next = nextChapterIndex(after: segment.chapterIndex)
+            let next = nextChapterIndex(after: segment.chapterIndex, progress: progress)
             let isLast = offset == segments.count - 1
             // Entre capítulos já carregados a leitura segue direto, salvo aviso de capítulos faltando.
             if isLast || settings.alwaysShowTransition || missingChapters(from: segment.chapterIndex, to: next) > 0 {
@@ -202,14 +203,17 @@ public struct ReaderView: View {
     /// Próximo capítulo na ordem de leitura (a lista está do mais novo para o mais antigo),
     /// pulando lidos e repetidos se o usuário pediu.
     private func nextChapterIndex(after index: Int) -> Int? {
+        nextChapterIndex(after: index, progress: settings.skipRead ? readProgress() : nil)
+    }
+
+    private func nextChapterIndex(after index: Int, progress: ChapterProgress?) -> Int? {
         guard allChapters.indices.contains(index) else { return nil }
         let current = allChapters[index]
-        let progress = (settings.skipRead || settings.skipDuplicates) ? readProgress() : nil
         var candidate = index - 1
         while candidate >= 0 {
             let chapter = allChapters[candidate]
             let duplicate = settings.skipDuplicates && chapter.chapterNumber >= 0 && chapter.chapterNumber == current.chapterNumber
-            let skipRead = settings.skipRead && progress?.isRead(chapter) == true
+            let skipRead = progress?.isRead(chapter) == true
             if !duplicate && !skipRead { return candidate }
             candidate -= 1
         }

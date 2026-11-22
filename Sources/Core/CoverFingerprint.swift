@@ -9,6 +9,8 @@ public final class ImageDiskStore: @unchecked Sendable {
     public static let shared = ImageDiskStore()
 
     public let directory: URL
+    private let inFlightLock = NSLock()
+    private var inFlight: [String: Task<Data?, Never>] = [:]
 
     private init() {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
@@ -31,32 +33,53 @@ public final class ImageDiskStore: @unchecked Sendable {
     }
 
     public func remove(_ urlString: String) {
+        inFlightLock.withLock { _ = inFlight.removeValue(forKey: urlString) }
         try? FileManager.default.removeItem(at: path(for: urlString))
     }
 
     public func clear() {
+        inFlightLock.withLock { inFlight.removeAll() }
         try? FileManager.default.removeItem(at: directory)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     }
 
-    /// Baixa (ou lê do disco) os bytes de uma imagem.
+    /// Baixa (ou lê do disco) os bytes de uma imagem. Coalesce requisições concorrentes da mesma URL.
     public func fetch(urlString: String, referer: String?) async -> Data? {
         if let cached = data(for: urlString) { return cached }
         guard let url = URL(string: urlString) else { return nil }
         // Páginas baixadas e da Fonte Local já estão no aparelho.
         if url.isFileURL { return try? Data(contentsOf: url) }
-        var req = URLRequest(url: url, timeoutInterval: 20)
-        // Servidores MangaDex@Home recusam User-Agent de navegador falsificado (respondem 404)
-        let isMangaDexHome = url.host?.hasSuffix("mangadex.network") == true
-        req.setValue(isMangaDexHome ? "MangaCademy-iOS/1.0" : HTTPClient.browserUserAgent, forHTTPHeaderField: "User-Agent")
-        req.setValue("image/avif,image/webp,image/apng,image/*,*/*;q=0.8", forHTTPHeaderField: "Accept")
-        // Muitos sites bloqueiam imagens sem o Referer do próprio domínio (anti-hotlink)
-        if let referer { req.setValue(referer, forHTTPHeaderField: "Referer") }
-        guard let (data, response) = try? await URLSession.shared.data(for: req) else { return nil }
-        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) { return nil }
-        guard !data.isEmpty else { return nil }
-        store(data, for: urlString)
-        return data
+
+        let task: Task<Data?, Never> = inFlightLock.withLock {
+            if let existing = inFlight[urlString] {
+                return existing
+            }
+            if let cached = data(for: urlString) {
+                return Task<Data?, Never> { cached }
+            }
+            let newTask = Task.detached(priority: .userInitiated) { [self] () -> Data? in
+                defer {
+                    self.inFlightLock.withLock {
+                        _ = self.inFlight.removeValue(forKey: urlString)
+                    }
+                }
+                var req = URLRequest(url: url, timeoutInterval: 20)
+                // Servidores MangaDex@Home recusam User-Agent de navegador falsificado (respondem 404)
+                let isMangaDexHome = url.host?.hasSuffix("mangadex.network") == true
+                req.setValue(isMangaDexHome ? "MangaCademy-iOS/1.0" : HTTPClient.browserUserAgent, forHTTPHeaderField: "User-Agent")
+                req.setValue("image/avif,image/webp,image/apng,image/*,*/*;q=0.8", forHTTPHeaderField: "Accept")
+                // Muitos sites bloqueiam imagens sem o Referer do próprio domínio (anti-hotlink)
+                if let referer { req.setValue(referer, forHTTPHeaderField: "Referer") }
+                guard let (data, response) = try? await URLSession.shared.data(for: req) else { return nil }
+                if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) { return nil }
+                guard !data.isEmpty else { return nil }
+                self.store(data, for: urlString)
+                return data
+            }
+            inFlight[urlString] = newTask
+            return newTask
+        }
+        return await task.value
     }
 }
 
