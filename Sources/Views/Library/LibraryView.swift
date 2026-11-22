@@ -110,22 +110,10 @@ public struct LibraryView: View {
 
     public var body: some View {
         NavigationStack(path: $path) {
-            VStack(spacing: 0) {
-                if settings.showCategoryTabs && tabs.count > 1 && !favoriteMangas.isEmpty {
-                    categoryBar
-                }
-                if updater.isRunning {
-                    VStack(spacing: 4) {
-                        ProgressView(value: Double(updater.progress), total: Double(max(updater.total, 1)))
-                        Text("Atualizando \(updater.progress) de \(updater.total)…")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.horizontal)
-                    .padding(.bottom, 4)
-                }
-                content
-            }
+            content
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Theme.canvas)
+            .floatingHeader { header }
             .navigationTitle(isSelecting ? "\(selection.count) selecionadas" : "Biblioteca")
             .navigationDestination(for: UnifiedWork.self) { work in
                 MangaDetailView(work: work)
@@ -154,32 +142,34 @@ public struct LibraryView: View {
         }
     }
 
+    /// Categorias e progresso da atualização, por cima da grade (translúcido, não empurra o conteúdo).
+    @ViewBuilder
+    private var header: some View {
+        let showsTabs = settings.showCategoryTabs && tabs.count > 1 && !favoriteMangas.isEmpty
+        if showsTabs || updater.isRunning {
+            VStack(spacing: Theme.Space.s) {
+                if showsTabs { categoryBar }
+                if updater.isRunning { UpdateProgressBar(updater: updater) }
+            }
+            .padding(.vertical, Theme.Space.s)
+        }
+    }
+
     private var categoryBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(spacing: Theme.Space.s) {
                 ForEach(tabs, id: \.id) { tab in
                     let selected = tab.id == activeTab
                     Button {
                         withAnimation(.snappy) { settings.selectedCategory = tab.id }
                     } label: {
-                        HStack(spacing: 4) {
-                            Text(tab.name)
-                            Text("\(mangas(in: tab.id).count)")
-                                .monospacedDigit()
-                                .foregroundStyle(selected ? Color.white.opacity(0.85) : .secondary)
-                        }
-                        .font(.subheadline.weight(.semibold))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(selected ? Color.accentColor : Color.secondary.opacity(0.12))
-                        .foregroundStyle(selected ? Color.white : Color.primary)
-                        .clipShape(Capsule())
+                        Chip(title: tab.name, count: mangas(in: tab.id).count, isSelected: selected)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityAddTraits(selected ? .isSelected : [])
                 }
             }
-            .padding(.horizontal)
-            .padding(.vertical, 6)
+            .padding(.horizontal, Theme.Space.margin)
         }
     }
 
@@ -187,9 +177,12 @@ public struct LibraryView: View {
     private var content: some View {
         if favoriteMangas.isEmpty {
             ContentUnavailableView {
-                Label("Sua biblioteca está vazia", systemImage: "books.vertical")
+                Label("Biblioteca vazia", systemImage: "books.vertical")
             } description: {
-                Text("Explore obras de todas as fontes Keiyoushi e adicione às suas favoritas.")
+                Text("Adicione obras pelo Explorar.")
+            } actions: {
+                Button("Explorar") { AppNavigation.shared.tab = .browse }
+                    .buttonStyle(.borderedProminent)
             }
         } else {
             let list = visibleMangas
@@ -197,26 +190,29 @@ public struct LibraryView: View {
                 ScrollView {
                     if list.isEmpty {
                         ContentUnavailableView(
-                            "Nada por aqui",
-                            systemImage: "line.3.horizontal.decrease.circle",
-                            description: Text(settings.hasActiveFilter || !searchText.isEmpty ? "Nenhuma obra combina com a busca ou os filtros." : "Esta categoria está vazia.")
+                            settings.hasActiveFilter || !searchText.isEmpty ? "Nada com esses filtros" : "Categoria vazia",
+                            systemImage: "line.3.horizontal.decrease.circle"
                         )
                         .padding(.top, 60)
                     } else if settings.displayMode == .list {
                         LazyVStack(spacing: 0) {
                             ForEach(list) { manga in
                                 cell(manga)
-                                    .padding(.horizontal)
-                                Divider().padding(.leading, 74)
+                                    .padding(.horizontal, Theme.Space.margin)
+                                Rectangle()
+                                    .fill(Theme.hairline)
+                                    .frame(height: 0.5)
+                                    .padding(.leading, Theme.Space.margin + 46 + Theme.Space.m)
                             }
                         }
                     } else {
-                        LazyVGrid(columns: columns(width: proxy.size.width, landscape: proxy.size.width > proxy.size.height), spacing: 16) {
+                        LazyVGrid(columns: columns(width: proxy.size.width, landscape: proxy.size.width > proxy.size.height), spacing: Theme.Space.gridRow) {
                             ForEach(list) { manga in
                                 cell(manga)
                             }
                         }
-                        .padding()
+                        .padding(.horizontal, Theme.Space.margin)
+                        .padding(.vertical, Theme.Space.s)
                     }
                 }
                 .refreshable {
@@ -230,10 +226,10 @@ public struct LibraryView: View {
     private func columns(width: CGFloat, landscape: Bool) -> [GridItem] {
         let count = landscape ? settings.landscapeColumns : settings.portraitColumns
         if count > 0 {
-            return Array(repeating: GridItem(.flexible(), spacing: 12), count: count)
+            return Array(repeating: GridItem(.flexible(), spacing: Theme.Space.gutter), count: count)
         }
         let minimum: CGFloat = settings.displayMode == .coverOnly ? 90 : 105
-        return [GridItem(.adaptive(minimum: minimum, maximum: 130), spacing: 14)]
+        return [GridItem(.adaptive(minimum: minimum, maximum: 130), spacing: Theme.Space.gutter)]
     }
 
     private func cell(_ manga: Manga) -> some View {
@@ -431,6 +427,24 @@ extension MangaGridItem {
             unreadCount: unreadCount
         )
         .library(mode: displayMode, downloadCount: downloadCount, isSelected: isSelected, onContinue: onContinue)
+    }
+}
+
+/// Barra fina do progresso da atualização da biblioteca, com o contador ao lado.
+struct UpdateProgressBar: View {
+    let updater: LibraryUpdater
+
+    var body: some View {
+        HStack(spacing: Theme.Space.s) {
+            ProgressView(value: Double(updater.progress), total: Double(max(updater.total, 1)))
+                .tint(Theme.accent)
+            Text("\(updater.progress)/\(updater.total)")
+                .textRole(.caption)
+                .monospacedDigit()
+        }
+        .padding(.horizontal, Theme.Space.margin)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Atualizando \(updater.progress) de \(updater.total)")
     }
 }
 

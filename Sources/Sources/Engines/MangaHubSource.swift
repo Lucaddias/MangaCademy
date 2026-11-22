@@ -37,7 +37,7 @@ public final class MangaHubSource: ThemeSource, MangaSource {
             guard let slug = row.string("slug"), let title = row.string("title") else { return nil }
             var result = item(remoteUrl: "/manga/\(slug)", title: title, cover: Self.thumbnail(row.string("image")))
             result.latestChapterName = row.string("latestChapter").map { "Cap. \(Self.number($0))" }
-            result.latestChapterDate = row.string("updatedDate").flatMap(DateParsing.iso)
+            // updatedDate pertence à obra e pode mudar sem capítulo novo.
             return result
         }
         return SourceMangaPage(items: items, hasNextPage: rows.count == Self.pageSize)

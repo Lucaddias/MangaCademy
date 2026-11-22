@@ -23,7 +23,17 @@ enum ChapterPageProvider {
         guard let source = SourceManager.shared.getSource(id: chapter.sourceId) else { throw Failure.sourceUnavailable }
         let pages = try await source.fetchPages(chapterRemoteUrl: chapter.remoteUrl, mangaRemoteUrl: chapter.mangaRemoteUrl)
         guard !pages.isEmpty else { throw Failure.empty(source.name) }
+        cache(pages, of: chapter)
         return pages
+    }
+
+    /// Páginas da internet ficam na pasta temporária do capítulo.
+    private static func cache(_ pages: [SourcePageItem], of chapter: SourceChapterItem) {
+        // Páginas da Fonte Local já estão no aparelho.
+        let urls = pages.map(\.imageUrl).filter { !$0.hasPrefix("file:") }
+        guard !urls.isEmpty else { return }
+        let key = ChapterPageCache.key(for: chapter)
+        ChapterPageCache.shared.assign(urls: urls, to: key)
     }
 }
 

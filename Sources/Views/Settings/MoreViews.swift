@@ -43,6 +43,7 @@ struct StatsView: View {
                 ProgressView()
             }
         }
+        .themedList()
         .navigationTitle("Estatísticas")
         .navigationBarTitleDisplayMode(.inline)
         .task { stats = compute() }
@@ -112,6 +113,7 @@ struct SecurityAppearanceView: View {
                 Text("O modo anônimo (não gravar histórico) fica no menu do leitor.")
             }
         }
+        .themedList()
         .navigationTitle("Aparência e segurança")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -139,6 +141,7 @@ struct DataCleanupView: View {
                 Text("Desfaz verificações do Cloudflare e logins feitos pela WebView.")
             }
         }
+        .themedList()
         .navigationTitle("Dados")
         .navigationBarTitleDisplayMode(.inline)
         .alert("Dados", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
@@ -214,6 +217,7 @@ struct OnboardingView: View {
                     Button("Importar backup do Mihon ou do MangaCademy") { showBackup = true }
                 }
             }
+            .themedList()
             .navigationTitle("Bem-vindo")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {

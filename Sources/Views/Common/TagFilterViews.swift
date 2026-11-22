@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Faixa de tags do Explorar: botão com a lista completa, as tags escolhidas (toque remove)
-/// e as mais comuns entre as obras carregadas (toque escolhe).
+/// Faixa de tags (obras de uma tag): botão com a lista completa, as tags escolhidas (toque remove)
+/// e as mais comuns entre as obras carregadas, gêneros fixos antes das outras (toque escolhe).
 struct TagChipsBar: View {
     let tags: [GenreTags.Count]
     @Binding var selection: Set<String>
@@ -10,43 +10,31 @@ struct TagChipsBar: View {
     @State private var showPicker = false
 
     private var suggested: [GenreTags.Count] {
-        Array(tags.filter { !selection.contains($0.key) }.prefix(suggestions))
+        Array(tags.filter { $0.count > 0 && !selection.contains($0.key) }.prefix(suggestions))
     }
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(spacing: Theme.Space.s) {
                 Button { showPicker = true } label: {
-                    Label(selection.isEmpty ? "Tags" : "Tags (\(selection.count))", systemImage: "tag")
-                        .font(.footnote.weight(.semibold))
+                    Chip(title: "Tags", count: selection.isEmpty ? nil : selection.count, systemImage: "tag")
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
 
                 ForEach(selection.sorted(by: { label(for: $0) < label(for: $1) }), id: \.self) { key in
                     Button { selection.remove(key) } label: {
-                        HStack(spacing: 4) {
-                            Text(label(for: key))
-                            Image(systemName: "xmark")
-                                .font(.caption2.weight(.bold))
-                        }
-                        .font(.footnote)
+                        Chip(title: label(for: key), isSelected: true, removable: true)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
                     .accessibilityLabel("Remover tag \(label(for: key))")
                 }
 
                 ForEach(suggested) { tag in
                     Button { selection.insert(tag.key) } label: {
-                        Text(tag.label).font(.footnote)
+                        Chip(title: tag.label, muted: true)
                     }
-                    .buttonStyle(.bordered)
-                    .tint(.secondary)
-                    .controlSize(.small)
                 }
             }
-            .padding(.horizontal)
+            .buttonStyle(.plain)
+            .padding(.horizontal, Theme.Space.margin)
         }
         .sheet(isPresented: $showPicker) {
             NavigationStack {
@@ -67,17 +55,26 @@ struct TagChipsBar: View {
 }
 
 /// Todas as tags com quantas obras têm cada uma; marca várias (a obra precisa ter todas).
+/// Os gêneros fixos vêm primeiro, em ordem alfabética; depois, as outras tags das fontes.
 struct TagPickerList: View {
     let tags: [GenreTags.Count]
     @Binding var selection: Set<String>
-    var footer = "Aparecem só as obras com todas as tags marcadas. A lista cresce à medida que mais obras carregam."
+    var footer = "Aparecem só as obras com todas as tags marcadas. Os gêneros estão sempre na lista; as outras tags vêm das obras já carregadas."
 
     @State private var search = ""
 
     private var filtered: [GenreTags.Count] {
         let query = search.trimmed
         guard !query.isEmpty else { return tags.filter { !selection.contains($0.key) } }
-        return tags.filter { $0.label.localizedStandardContains(query) || GenreTags.key(for: query) == $0.key }
+        return tags.filter { GenreTags.search(query, matches: $0) }
+    }
+
+    private var genres: [GenreTags.Count] {
+        filtered.filter(\.isGenre).sorted { $0.label.localizedStandardCompare($1.label) == .orderedAscending }
+    }
+
+    private var others: [GenreTags.Count] {
+        filtered.filter { !$0.isGenre }
     }
 
     /// Escolhidas no topo, inclusive as que não estão entre as obras carregadas
@@ -96,14 +93,24 @@ struct TagPickerList: View {
                     }
                 }
             }
+            if !genres.isEmpty {
+                Section("Gêneros") {
+                    ForEach(genres) { tag in
+                        row(label: tag.label, key: tag.key, count: tag.count > 0 ? tag.count : nil)
+                    }
+                }
+            }
             Section {
-                ForEach(filtered) { tag in
+                ForEach(others) { tag in
                     row(label: tag.label, key: tag.key, count: tag.count)
                 }
+            } header: {
+                if !others.isEmpty && !genres.isEmpty { Text("Outras tags") }
             } footer: {
                 Text(tags.isEmpty ? "As tags aparecem quando as obras terminam de carregar." : footer)
             }
         }
+        .themedList()
         .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always), prompt: "Buscar tag")
         .navigationTitle("Tags")
         .navigationBarTitleDisplayMode(.inline)
@@ -121,18 +128,17 @@ struct TagPickerList: View {
         } label: {
             HStack {
                 Image(systemName: selection.contains(key) ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(selection.contains(key) ? Color.accentColor : .secondary)
-                Text(label).foregroundStyle(.primary)
+                    .foregroundStyle(selection.contains(key) ? Theme.accent : Theme.inkTertiary)
+                Text(label).foregroundStyle(Theme.ink)
                 Spacer()
                 if let count {
                     Text("\(count)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .textRole(.caption)
                         .monospacedDigit()
                 }
             }
         }
-        .tint(.primary)
+        .tint(Theme.ink)
         .accessibilityAddTraits(selection.contains(key) ? .isSelected : [])
     }
 }

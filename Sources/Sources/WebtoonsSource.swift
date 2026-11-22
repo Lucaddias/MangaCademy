@@ -57,11 +57,8 @@ public final class WebtoonsSource: ThemeSource, MangaSource {
     func parseList(_ doc: HTMLDocument) -> [SourceMangaItem] {
         doc.select("//*[\(cls("webtoon_list"))]//li//a[@href]").compactMap { link in
             guard let href = link.absAttr("href"), let title = link.first(".//*[\(cls("title"))]")?.text.nilIfEmpty else { return nil }
-            var result = item(remoteUrl: storedPath(href), title: title, cover: link.first(".//img")?.absAttr("src"))
-            if link.first(".//*[contains(@class, 'badge_up')]") != nil {
-                result.latestChapterDate = ChapterDateParser.parse("today")
-            }
-            return result
+            // O selo UP não informa a data de publicação de um capítulo.
+            return item(remoteUrl: storedPath(href), title: title, cover: link.first(".//img")?.absAttr("src"))
         }
     }
 

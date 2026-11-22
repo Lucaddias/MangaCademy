@@ -22,7 +22,7 @@ public struct WorkSourceRef: Codable, Hashable, Identifiable {
 
 /// Obra unificada: o mesmo título vindo de várias fontes e idiomas aparece uma única vez.
 public struct UnifiedWork: Identifiable, Hashable {
-    public let id: String
+    public private(set) var id: String
     public var title: String
     public var coverUrl: String?
     public var coverSourceId: String?
@@ -90,6 +90,22 @@ public struct UnifiedWork: Identifiable, Hashable {
             coverUrl = cover
             coverSourceId = ref.sourceId
         }
+    }
+
+    /// Une grupos do catálogo sem trocar a identidade do primeiro grupo ou descartar referências.
+    mutating func merge(work other: UnifiedWork) {
+        for ref in other.refs where !refs.contains(where: { $0.id == ref.id }) { refs.append(ref) }
+        addLanguages(other.languages)
+        addGenres(other.genres)
+        titleKeys.formUnion(other.titleKeys)
+        hasAdultTag = hasAdultTag || other.hasAdultTag
+        onlyAdultSources = onlyAdultSources && other.onlyAdultSources
+        if coverUrl == nil { coverUrl = other.coverUrl; coverSourceId = other.coverSourceId }
+        noteLatestChapter(name: other.latestChapterName, date: other.latestChapterDate)
+    }
+
+    mutating func preserveIdentity(_ id: String?) {
+        if let id { self.id = id }
     }
 
     /// Guarda o capítulo se for mais novo que o conhecido (com data vale mais que sem data).
@@ -240,12 +256,18 @@ public enum TitleKey {
 ///    "Love is an Illusion! - Superstar"), com confirmação pela capa quando só há palavras comuns;
 /// 3. as capas são praticamente a mesma imagem e os títulos compartilham uma palavra distintiva.
 /// Duas entradas diferentes da mesma fonte nunca são fundidas pelos critérios 2 e 3.
+public enum IdentityMergeDecision {
+    case deny
+    case allow(preferredID: String?)
+}
+
 public struct WorkMerger {
     public private(set) var works: [UnifiedWork] = []
     /// Quantas obras têm tag adulta (para o catálogo saber quantas ficarão visíveis).
     public private(set) var adultCount = 0
     private var indexByKey: [String: Int] = [:]
     private var indexByRef: [String: Int] = [:]
+    private var aliasesByRef: [String: Set<String>] = [:]
     /// Paralelos a `works`: conceitos de cada título e fontes presentes.
     private var conceptSets: [[Set<String>]] = []
     private var sourceIds: [Set<String>] = []
@@ -254,8 +276,12 @@ public struct WorkMerger {
     private var genericCovers: [UInt64] = []
     /// Por que cada entrada foi fundida sem título idêntico (diagnóstico).
     public private(set) var fuzzyReasons: [String: String] = [:]
+    /// Deve confirmar que as identidades envolvidas não têm dados locais independentes.
+    private let canMergeIdentities: ((Set<String>) -> IdentityMergeDecision)?
 
-    public init() {}
+    public init(canMergeIdentities: ((Set<String>) -> IdentityMergeDecision)? = nil) {
+        self.canMergeIdentities = canMergeIdentities
+    }
 
     public func contains(refId: String) -> Bool {
         indexByRef[refId] != nil
@@ -264,13 +290,19 @@ public struct WorkMerger {
     /// Obra já existente com algum título idêntico (não precisa de dados extras para fundir).
     public func exactMatch(for item: SourceMangaItem) -> Int? {
         let mainKeys = TitleKey.keys(for: [item.title])
-        let keys = mainKeys.union(TitleKey.keys(for: item.altTitles))
+        let alternateKeys = TitleKey.keys(for: item.altTitles)
+        let keys = mainKeys.union(alternateKeys)
         for existing in Set(keys.compactMap({ indexByKey[$0] })).sorted() {
-            // Dentro da mesma fonte só funde duplicatas com o mesmo título principal;
-            // assim um título alternativo genérico não arrasta obras diferentes do mesmo site.
+            // Na mesma fonte, um alias unilateral pode ser genérico demais.
             let sameSource = works[existing].refs.filter { $0.sourceId == item.sourceId }
             if !sameSource.isEmpty && mainKeys.isDisjoint(with: TitleKey.keys(for: sameSource.map(\.title))) {
-                continue
+                // Na mesma fonte, um alias unilateral pode ser genérico. Aceitar nomes
+                // diferentes apenas quando ambos os registros declaram o outro como alias.
+                let reciprocal = sameSource.contains { ref in
+                    !mainKeys.isDisjoint(with: aliasesByRef[ref.id] ?? [])
+                        && !alternateKeys.isDisjoint(with: TitleKey.keys(for: [ref.title]))
+                }
+                if !reciprocal { continue }
             }
             return existing
         }
@@ -294,6 +326,8 @@ public struct WorkMerger {
         var hash = coverHash
         if let coverHash, isGeneric(coverHash, sourceId: item.sourceId) { hash = nil }
 
+        reconcileGroups(for: item, coverHash: hash)
+
         var target = exactMatch(for: item)
         if target == nil, let match = conceptMatch(sets, sourceId: item.sourceId, coverHash: hash) {
             target = match.index
@@ -303,7 +337,18 @@ public struct WorkMerger {
             target = match.index
             fuzzyReasons[item.id] = match.reason
         }
+        var preferredID: String?
+        if let index = target, let canMergeIdentities {
+            let identities = Set(works[index].refs.map(\.id)).union([works[index].id, item.id])
+            switch canMergeIdentities(identities) {
+            case .deny: target = nil; fuzzyReasons[item.id] = nil
+            case .allow(let id):
+                if let id, !identities.contains(id) { target = nil; fuzzyReasons[item.id] = nil }
+                else { preferredID = id }
+            }
+        }
         if let target {
+            works[target].preserveIdentity(preferredID)
             let wasAdult = works[target].isAdult
             works[target].merge(ref: ref, altTitles: item.altTitles, genres: item.genres, fromAdultSource: adultSource)
             works[target].noteLatestChapter(name: item.latestChapterName, date: item.latestChapterDate)
@@ -325,6 +370,71 @@ public struct WorkMerger {
 
     // MARK: - Índices
 
+    /// Um registro enriquecido pode conectar grupos anteriormente separados. Só os une com
+    /// metadados completos, nomes distintos confirmados e impressão de capa idêntica e exclusiva.
+    private mutating func reconcileGroups(for item: SourceMangaItem, coverHash: UInt64?) {
+        guard item.hasFullMetadata, let hash = coverHash else { return }
+        let keys = TitleKey.keys(for: [item.title] + item.altTitles)
+        guard keys.count >= 2 else { return }
+        let imageGroups = Set(covers.filter { $0.hash == hash }.map(\.work))
+        let candidates = imageGroups.filter { !works[$0].titleKeys.isDisjoint(with: keys) }.sorted()
+        guard candidates.count > 1, Set(candidates) == imageGroups else { return }
+        let matchedKeys = candidates.reduce(into: Set<String>()) {
+            $0.formUnion(TitleKey.keys(for: works[$1].refs.map(\.title)).intersection(keys))
+        }
+        guard matchedKeys.count >= 2 else { return }
+        // Sem contexto de persistência, não se pode garantir que a segunda identidade
+        // não tenha progresso, marcadores ou downloads que a tela deixaria de mostrar.
+        guard let canMergeIdentities else { return }
+        let identities = Set(candidates.flatMap { [works[$0].id] + works[$0].refs.map(\.id) }).union([item.id])
+        let preferredID: String?
+        switch canMergeIdentities(identities) {
+        case .deny: return
+        case .allow(let id): preferredID = id
+        }
+        // A identidade escolhida deve já pertencer ao grupo: o item novo ainda pode
+        // ser recusado no passo seguinte (por exemplo, ao esgotar o orçamento da guarda).
+        if let preferredID, !candidates.contains(where: { works[$0].refs.contains(where: { $0.id == preferredID }) }) { return }
+        // Não unir duas entradas de uma mesma fonte sem confirmação recíproca de aliases.
+        for (offset, left) in candidates.enumerated() {
+            for right in candidates.dropFirst(offset + 1) {
+                for a in works[left].refs {
+                    for b in works[right].refs where a.sourceId == b.sourceId {
+                        guard !(aliasesByRef[a.id] ?? []).isDisjoint(with: TitleKey.keys(for: [b.title])),
+                              !(aliasesByRef[b.id] ?? []).isDisjoint(with: TitleKey.keys(for: [a.title])) else { return }
+                    }
+                }
+            }
+        }
+        let target = candidates[0]
+        let removed = Set(candidates.dropFirst())
+        for index in removed.sorted(by: >) {
+            let other = works[index]
+            let otherSets = conceptSets[index]
+            let otherSources = sourceIds[index]
+            works[target].merge(work: other)
+            for set in otherSets where !conceptSets[target].contains(set) { conceptSets[target].append(set) }
+            sourceIds[target].formUnion(otherSources)
+            works.remove(at: index)
+            conceptSets.remove(at: index)
+            sourceIds.remove(at: index)
+        }
+        works[target].preserveIdentity(preferredID)
+        func remap(_ index: Int) -> Int {
+            if removed.contains(index) { return target }
+            return index - removed.filter { $0 < index }.count
+        }
+        indexByRef = indexByRef.mapValues(remap)
+        covers = covers.map { (hash: $0.hash, work: remap($0.work), sourceId: $0.sourceId) }
+        indexByKey.removeAll()
+        indexByConcept.removeAll()
+        for index in works.indices {
+            for key in works[index].titleKeys where indexByKey[key] == nil { indexByKey[key] = index }
+            for token in Set(conceptSets[index].joined()) { indexByConcept[token, default: []].append(index) }
+        }
+        adultCount = works.filter(\.isAdult).count
+    }
+
     private static func concepts(for item: SourceMangaItem) -> [Set<String>] {
         var result: [Set<String>] = []
         for title in [item.title] + item.altTitles.prefix(40) {
@@ -336,6 +446,7 @@ public struct WorkMerger {
 
     private mutating func register(_ item: SourceMangaItem, sets: [Set<String>], coverHash: UInt64?, at index: Int) {
         indexByRef[item.id] = index
+        aliasesByRef[item.id] = TitleKey.keys(for: item.altTitles)
         for key in works[index].titleKeys where indexByKey[key] == nil {
             indexByKey[key] = index
         }

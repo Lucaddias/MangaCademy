@@ -11,6 +11,7 @@ public struct HistoryView: View {
 
     @State private var resumingEntry: HistoryEntry?
     @State private var detailWork: UnifiedWork?
+    @State private var confirmClear = false
 
     public init() {}
 
@@ -18,46 +19,35 @@ public struct HistoryView: View {
         NavigationStack {
             Group {
                 if historyEntries.isEmpty {
-                    VStack(spacing: 16) {
-                        Image(systemName: "clock")
-                            .font(.system(size: 60))
-                            .foregroundStyle(.secondary)
-                        Text("Nenhum histórico")
-                            .font(.headline)
-                        Text("Os capítulos que você ler aparecerão aqui.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
+                    ContentUnavailableView("Nada lido ainda", systemImage: "clock")
                 } else {
                     List {
                         ForEach(historyEntries) { entry in
-                            HStack(spacing: 12) {
-                                AsyncMangaCover(urlString: entry.coverUrl, cornerRadius: 6)
-                                    .frame(width: 50, height: 75)
+                            HStack(spacing: Theme.Space.m) {
+                                AsyncMangaCover(urlString: entry.coverUrl, cornerRadius: Theme.Radius.thumb)
+                                    .frame(width: 44, height: 66)
                                     .onTapGesture { openWork(entry) }
 
-                                VStack(alignment: .leading, spacing: 4) {
+                                VStack(alignment: .leading, spacing: Theme.Space.xs) {
                                     Text(entry.mangaTitle)
-                                        .font(.subheadline.bold())
+                                        .textRole(.bodyStrong)
                                         .lineLimit(1)
                                     Text(entry.chapterName)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-
-                                    HStack {
-                                        Text(entry.readAt, format: .dateTime.day().month().hour().minute())
-                                            .font(.caption2)
-                                            .foregroundStyle(.tertiary)
-                                        Spacer()
+                                        .textRole(.meta)
+                                        .lineLimit(1)
+                                    HStack(spacing: Theme.Space.s) {
+                                        // Onde parou vira uma barra, não texto
                                         if entry.totalPages > 0 {
-                                            Text("Pág. \(entry.pageNumber)/\(entry.totalPages)")
-                                                .font(.caption2)
-                                                .foregroundStyle(.secondary)
+                                            PageProgress(page: entry.pageNumber, total: entry.totalPages)
                                         }
+                                        Text(entry.readAt, format: .relative(presentation: .named, unitsStyle: .abbreviated))
+                                            .textRole(.caption)
+                                            .lineLimit(1)
+                                            .fixedSize()
                                     }
                                 }
                             }
-                            .padding(.vertical, 4)
+                            .padding(.vertical, Theme.Space.xs)
                             .contentShape(Rectangle())
                             .onTapGesture { resumingEntry = entry }
                             .contextMenu {
@@ -76,11 +66,17 @@ public struct HistoryView: View {
                             .accessibilityAddTraits(.isButton)
                             .accessibilityHint("Continua a leitura")
                             .accessibilityAction(named: "Ver obra") { openWork(entry) }
+                            .listRowBackground(Color.clear)
+                            .listRowSeparatorTint(Theme.hairline)
+                            .listRowInsets(EdgeInsets(top: Theme.Space.xs, leading: Theme.Space.margin, bottom: Theme.Space.xs, trailing: Theme.Space.margin))
                         }
                         .onDelete(perform: deleteEntries)
+                        .listSectionSeparator(.hidden)
                     }
+                    .listStyle(.plain)
                 }
             }
+            .themedList()
             .navigationTitle("Histórico")
             .navigationDestination(item: $detailWork) { work in
                 MangaDetailView(work: work)
@@ -91,11 +87,13 @@ public struct HistoryView: View {
             .toolbar {
                 if !historyEntries.isEmpty {
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button("Limpar Tudo") {
-                            clearAll()
-                        }
+                        Button { confirmClear = true } label: { Image(systemName: "trash") }
+                            .accessibilityLabel("Limpar histórico")
                     }
                 }
+            }
+            .confirmationDialog("Limpar todo o histórico?", isPresented: $confirmClear, titleVisibility: .visible) {
+                Button("Limpar", role: .destructive) { clearAll() }
             }
         }
     }
@@ -121,6 +119,24 @@ public struct HistoryView: View {
             modelContext.delete(entry)
         }
         try? modelContext.save()
+    }
+}
+
+/// Página onde a leitura parou, como uma barra curta.
+private struct PageProgress: View {
+    let page: Int
+    let total: Int
+
+    var body: some View {
+        Capsule()
+            .fill(Theme.fill)
+            .frame(width: 44, height: 3)
+            .overlay(alignment: .leading) {
+                Capsule()
+                    .fill(Theme.accent)
+                    .frame(width: 44 * min(max(Double(page) / Double(total), 0.04), 1))
+            }
+            .accessibilityLabel("Página \(page) de \(total)")
     }
 }
 
@@ -150,7 +166,7 @@ private struct HistoryReaderLauncher: View {
                     VStack(spacing: 12) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.largeTitle)
-                            .foregroundStyle(.yellow)
+                            .foregroundStyle(Theme.caution)
                         Text(errorMessage)
                             .font(.headline)
                             .foregroundStyle(.white)
@@ -176,6 +192,8 @@ private struct HistoryReaderLauncher: View {
                     }
                 }
             }
+            // Fundo sempre preto: cores e botões no tom escuro
+            .environment(\.colorScheme, .dark)
             .task {
                 do {
                     resumed = try await HistoryResume.resume(entry, context: modelContext)

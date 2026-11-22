@@ -100,7 +100,7 @@ struct EngineParserTests {
         #expect(WebtoonsSource.chapterNumbers(["Prologue", "The start", "Ep. 1"]) == [1, 2, 3])
     }
 
-    @Test func webtoonsListKeepsTheTitleNumberAndMarksUpdates() {
+    @Test func webtoonsListKeepsTheTitleNumberWithoutInventingUpdateDates() {
         let source = WebtoonsSource(id: "w", name: "W", language: "en", baseUrl: "https://www.webtoons.com", config: config("webtoons"))
         let doc = html("""
         <ul class="webtoon_list">
@@ -111,7 +111,7 @@ struct EngineParserTests {
         """, base: "https://www.webtoons.com")
         let items = source.parseList(doc)
         #expect(items.map(\.remoteUrl) == ["/en/romance/foo/list?title_no=95", "/en/drama/bar/list?title_no=7"])
-        #expect(items[0].latestChapterDate != nil)
+        #expect(items[0].latestChapterDate == nil)
         #expect(items[1].latestChapterDate == nil)
     }
 

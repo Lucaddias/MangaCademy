@@ -218,8 +218,8 @@ public final class MangaDexSource: LanguageScopedSource {
                 ("includeEmptyPages", "0"),
             ]
             params += ["safe", "suggestive", "erotica", "pornographic"].map { ("contentRating[]", $0) }
-            guard let root = try await http.json(url("/manga/\(mangaId)/feed", params), userAgent: userAgent) as? [String: Any] else { break }
-            let data = root.array("data")
+            let response = try await http.json(url("/manga/\(mangaId)/feed", params), userAgent: userAgent)
+            let (data, total) = try Self.chapterFeedPage(response)
             for ch in data {
                 guard let chapterId = ch.string("id"), let attrs = ch.dict("attributes") else { continue }
                 if attrs.string("externalUrl") != nil { continue }
@@ -244,11 +244,19 @@ public final class MangaDexSource: LanguageScopedSource {
                     mangaRemoteUrl: mangaId
                 ))
             }
-            let total = root.int("total") ?? 0
             offset += limit
             if data.isEmpty || offset >= total { break }
         }
         return chapters
+    }
+
+    static func chapterFeedPage(_ response: Any) throws -> ([[String: Any]], Int) {
+        guard let root = response as? [String: Any],
+              let data = root["data"] as? [[String: Any]],
+              let total = root.int("total"), total >= 0 else {
+            throw HTTPError.parse("a lista de capítulos do MangaDex")
+        }
+        return (data, total)
     }
 
     // MARK: - Páginas

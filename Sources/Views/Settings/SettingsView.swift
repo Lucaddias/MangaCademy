@@ -29,146 +29,131 @@ public struct SettingsView: View {
     public var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    NavigationLink {
-                        ExtensionsView()
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Extensões Keiyoushi")
-                                .font(.headline)
-                            Text("\(repository.supportedSourceCount) de \(repository.totalSourceCount) fontes ativas no app")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    // Antes era a aba "Fontes" do Explorar
-                    NavigationLink("Fontes") {
-                        SourcesListView()
-                            .navigationTitle("Fontes")
-                            .navigationBarTitleDisplayMode(.inline)
-                    }
-
-                    Picker("Idioma preferido", selection: $filterRaw) {
-                        ForEach(LanguageFilter.allCases) { Text($0.title).tag($0.rawValue) }
-                    }
-
-                    Toggle("Mostrar fontes +18", isOn: $showNsfw)
-
-                    Button {
-                        Task { await repository.refreshLive() }
-                    } label: {
-                        HStack {
-                            Text("Atualizar índice do repositório")
-                            Spacer()
-                            if repository.isLoading {
-                                ProgressView()
+                Group {
+                    Section {
+                        NavigationLink {
+                            ExtensionsView()
+                        } label: {
+                            LabeledContent("Extensões Keiyoushi") {
+                                Text("\(repository.supportedSourceCount)/\(repository.totalSourceCount)")
+                                    .monospacedDigit()
                             }
                         }
-                    }
-                    .disabled(repository.isLoading)
-                } header: {
-                    Text("Fontes")
-                } footer: {
-                    VStack(alignment: .leading, spacing: 4) {
+                        .accessibilityValue("\(repository.supportedSourceCount) de \(repository.totalSourceCount) fontes ativas")
+
+                        // Antes era a aba "Fontes" do Explorar
+                        NavigationLink("Fontes") {
+                            SourcesListView()
+                                .navigationTitle("Fontes")
+                                .navigationBarTitleDisplayMode(.inline)
+                        }
+
+                        Picker("Idioma preferido", selection: $filterRaw) {
+                            ForEach(LanguageFilter.allCases) { Text($0.title).tag($0.rawValue) }
+                        }
+
+                        Toggle("Mostrar fontes +18", isOn: $showNsfw)
+
+                        Button {
+                            Task { await repository.refreshLive() }
+                        } label: {
+                            HStack {
+                                Text("Atualizar índice")
+                                Spacer()
+                                if repository.isLoading {
+                                    ProgressView()
+                                } else if let updated = repository.lastUpdated {
+                                    Text(updated.formatted(.relative(presentation: .named)))
+                                        .foregroundStyle(Theme.inkTertiary)
+                                }
+                            }
+                        }
+                        .disabled(repository.isLoading)
+                    } header: {
+                        Text("Fontes")
+                    } footer: {
                         if let error = repository.lastError {
                             Text("Falha ao atualizar: \(error)")
-                                .foregroundStyle(.red)
-                        } else if let updated = repository.lastUpdated {
-                            Text("Índice de \(updated.formatted(date: .abbreviated, time: .shortened)). Atualizar traz domínios novos dos sites.")
+                                .foregroundStyle(Theme.critical)
                         }
                     }
-                }
 
-                Section("Biblioteca") {
-                    NavigationLink("Categorias (\(categories.count))") { CategoryManagerView() }
-                    NavigationLink("Atualizações") { UpdateSettingsView() }
-                    Picker("Categoria ao adicionar", selection: $librarySettings.defaultCategory) {
-                        Text("Padrão").tag("")
-                        Text("Perguntar sempre").tag("ask")
-                        ForEach(categories) { Text($0.name).tag($0.id) }
+                    Section("Biblioteca") {
+                        NavigationLink("Categorias (\(categories.count))") { CategoryManagerView() }
+                        NavigationLink("Atualizações") { UpdateSettingsView() }
+                        Picker("Categoria ao adicionar", selection: $librarySettings.defaultCategory) {
+                            Text("Padrão").tag("")
+                            Text("Perguntar sempre").tag("ask")
+                            ForEach(categories) { Text($0.name).tag($0.id) }
+                        }
+                        Picker("Deslizar para a direita", selection: $swipeStart) {
+                            ForEach(ChapterSwipeAction.allCases) { Text($0.title).tag($0.rawValue) }
+                        }
+                        Picker("Deslizar para a esquerda", selection: $swipeEnd) {
+                            ForEach(ChapterSwipeAction.allCases) { Text($0.title).tag($0.rawValue) }
+                        }
                     }
-                    Picker("Deslizar para a direita", selection: $swipeStart) {
-                        ForEach(ChapterSwipeAction.allCases) { Text($0.title).tag($0.rawValue) }
-                    }
-                    Picker("Deslizar para a esquerda", selection: $swipeEnd) {
-                        ForEach(ChapterSwipeAction.allCases) { Text($0.title).tag($0.rawValue) }
-                    }
-                }
 
-                Section {
-                    Toggle("Bloquear obras com tag adulta", isOn: $blockAdult)
-                } header: {
-                    Text("Conteúdo")
-                } footer: {
-                    Text("Esconde do catálogo e da busca as obras que alguma fonte marca como adultas (Adult, Mature, Smut, Hentai, +18…) e as que só existem em fontes +18. Tags como “Vida Adulta” e “Ecchi” não são bloqueadas.")
-                }
-
-                Section {
-                    Picker("Modo de leitura padrão", selection: $readerSettings.defaultMode) {
-                        ForEach(ReadingMode.allCases) { Text($0.title).tag($0) }
+                    Section {
+                        Toggle("Bloquear obras com tag adulta", isOn: $blockAdult)
+                    } header: {
+                        Text("Conteúdo")
+                    } footer: {
+                        Text("Inclui obras que só existem em fontes +18.")
                     }
-                    Toggle("Virar página com o volume", isOn: $volumeButtons)
-                    Toggle("Inverter botões de volume", isOn: $invertVolumeButtons)
-                        .disabled(!volumeButtons)
-                } header: {
-                    Text("Leitor")
-                } footer: {
-                    if volumeButtons {
-                        Text(ReaderPreferences.volumeButtonsFooter(inverted: invertVolumeButtons))
+
+                    Section {
+                        Picker("Modo de leitura padrão", selection: $readerSettings.defaultMode) {
+                            ForEach(ReadingMode.allCases) { Text($0.title).tag($0) }
+                        }
+                        Toggle("Virar página com o volume", isOn: $volumeButtons)
+                        Toggle("Inverter botões de volume", isOn: $invertVolumeButtons)
+                            .disabled(!volumeButtons)
+                    } header: {
+                        Text("Leitor")
                     }
-                }
 
-                Section("Downloads") {
-                    NavigationLink {
-                        DownloadQueueView()
-                    } label: {
-                        LabeledContent("Fila de downloads", value: downloads.queue.isEmpty ? "" : "\(downloads.queue.count)")
+                    Section("Downloads") {
+                        NavigationLink {
+                            DownloadQueueView()
+                        } label: {
+                            LabeledContent("Fila de downloads", value: downloads.queue.isEmpty ? "" : "\(downloads.queue.count)")
+                        }
+                        NavigationLink("Ajustes de download") { DownloadSettingsView() }
                     }
-                    NavigationLink("Ajustes de download") { DownloadSettingsView() }
-                }
 
-                Section("Dados") {
-                    NavigationLink("Estatísticas") { StatsView() }
-                    NavigationLink("Rastreamento") { TrackersSettingsView() }
-                    NavigationLink("Backup e restauração") { BackupView() }
-                    NavigationLink("Aparência e segurança") { SecurityAppearanceView() }
-                    NavigationLink("Limpeza e avançado") { DataCleanupView() }
-                }
-
-                Section(header: Text("Armazenamento & Cache")) {
-                    Button(role: .destructive) {
-                        ImageCache.shared.clearCache()
-                        MetadataCache.shared.clear()
-                        cacheCleared = true
-                    } label: {
-                        HStack {
-                            Text("Limpar Cache de Imagens")
-                            Spacer()
-                            if cacheCleared {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(.green)
+                    Section("Dados") {
+                        NavigationLink("Estatísticas") { StatsView() }
+                        NavigationLink("Rastreamento") { TrackersSettingsView() }
+                        NavigationLink("Backup e restauração") { BackupView() }
+                        NavigationLink("Aparência e segurança") { SecurityAppearanceView() }
+                        NavigationLink("Limpeza e avançado") { DataCleanupView() }
+                        Button {
+                            ImageCache.shared.clearCache()
+                            MetadataCache.shared.clear()
+                            cacheCleared = true
+                        } label: {
+                            HStack {
+                                Text("Limpar cache de imagens")
+                                    .foregroundStyle(Theme.critical)
+                                Spacer()
+                                if cacheCleared {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(Theme.positive)
+                                }
                             }
                         }
                     }
-                }
 
-                Section(header: Text("Sobre o Aplicativo")) {
-                    HStack {
-                        Text("Versão")
-                        Spacer()
-                        Text(appVersion)
-                            .foregroundStyle(.secondary)
-                    }
-                    HStack {
-                        Text("Repositório de fontes")
-                        Spacer()
-                        Text("keiyoushi/extensions")
-                            .foregroundStyle(.secondary)
+                    Section("Sobre") {
+                        LabeledContent("Versão", value: appVersion)
+                        LabeledContent("Repositório", value: "keiyoushi/extensions")
                     }
                 }
+                .listRowBackground(Theme.surface)
             }
-            .navigationTitle("Configurações")
+            .themedList()
+            .navigationTitle("Ajustes")
             .navigationDestination(for: SourceRoute.self) { route in
                 if let source = SourceManager.shared.getSource(id: route.id) {
                     SourceBrowseView(source: source)

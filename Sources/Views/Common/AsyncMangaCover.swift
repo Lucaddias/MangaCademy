@@ -44,18 +44,18 @@ public struct AsyncMangaCover: View {
                     .scaledToFill()
             } else if isLoading {
                 Rectangle()
-                    .fill(Color.gray.opacity(0.2))
+                    .fill(Theme.fill)
                     .overlay(
                         ProgressView()
                             .scaleEffect(0.8)
                     )
             } else {
                 Rectangle()
-                    .fill(Color.gray.opacity(0.15))
+                    .fill(Theme.fill)
                     .overlay(
                         Image(systemName: "book.closed")
                             .font(.title2)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.inkTertiary)
                     )
             }
         }

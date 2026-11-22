@@ -27,43 +27,48 @@ public struct ChapterRowView: View {
     }
     
     public var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(alignment: .center, spacing: Theme.Space.m) {
+            VStack(alignment: .leading, spacing: Theme.Space.xxs) {
                 Text(title)
                     .font(.subheadline)
                     .fontWeight(isRead ? .regular : .semibold)
-                    .foregroundStyle(isRead ? .secondary : .primary)
+                    .foregroundStyle(isRead ? Theme.inkTertiary : Theme.ink)
                     .lineLimit(1)
                 
                 if let scanlator = scanlator, !scanlator.isEmpty {
                     Text(scanlator)
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Theme.inkTertiary)
                         .lineLimit(1)
                 }
             }
             
             Spacer()
+
+            // O marcador só aparece marcado; marcar fica no deslizar e no toque longo
+            if isBookmarked {
+                Button(action: onToggleBookmark) {
+                    Image(systemName: "bookmark.fill")
+                        .font(.footnote)
+                        .foregroundStyle(Theme.caution)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Tirar marcador")
+            }
             
             if let downloadState {
                 DownloadIndicator(state: downloadState, action: onDownload)
             }
 
-            Button(action: onToggleBookmark) {
-                Image(systemName: isBookmarked ? "bookmark.fill" : "bookmark")
-                    .font(.footnote)
-                    .foregroundStyle(isBookmarked ? Color.yellow : Color.secondary.opacity(0.6))
-            }
-            .buttonStyle(.plain)
-            
             Button(action: onToggleRead) {
                 Image(systemName: isRead ? "checkmark.circle.fill" : "circle")
                     .font(.subheadline)
-                    .foregroundStyle(isRead ? Color.blue : Color.secondary.opacity(0.6))
+                    .foregroundStyle(isRead ? Theme.accent : Theme.inkTertiary)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(isRead ? "Marcar como não lido" : "Marcar como lido")
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, 10)
         .contentShape(Rectangle())
     }
 
@@ -85,21 +90,21 @@ struct DownloadIndicator: View {
             Group {
                 switch state {
                 case .none:
-                    Image(systemName: "arrow.down.circle").foregroundStyle(Color.secondary.opacity(0.6))
+                    Image(systemName: "arrow.down.circle").foregroundStyle(Theme.inkTertiary)
                 case .queued:
-                    Image(systemName: "clock").foregroundStyle(.secondary)
+                    Image(systemName: "clock").foregroundStyle(Theme.inkSecondary)
                 case .downloading(let fraction):
                     ZStack {
-                        Circle().stroke(Color.secondary.opacity(0.25), lineWidth: 2)
+                        Circle().stroke(Theme.fill, lineWidth: 2)
                         Circle().trim(from: 0, to: max(fraction, 0.03))
-                            .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                            .stroke(Theme.accent, style: StrokeStyle(lineWidth: 2, lineCap: .round))
                             .rotationEffect(.degrees(-90))
                     }
                     .frame(width: 15, height: 15)
                 case .failed:
-                    Image(systemName: "exclamationmark.circle").foregroundStyle(.red)
+                    Image(systemName: "exclamationmark.circle").foregroundStyle(Theme.critical)
                 case .downloaded:
-                    Image(systemName: "arrow.down.circle.fill").foregroundStyle(Color.accentColor)
+                    Image(systemName: "arrow.down.circle.fill").foregroundStyle(Theme.positive)
                 }
             }
             .font(.subheadline)

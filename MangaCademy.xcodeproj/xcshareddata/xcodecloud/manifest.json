@@ -1,0 +1,9 @@
+{
+  "id" : "df5e0f5a-2081-4346-9db9-09f4edf6ca5d",
+  "targets" : [
+    {
+      "id" : "d560628c-050e-4e01-81ba-49edb5634344",
+      "name" : "MihonReader"
+    }
+  ]
+}

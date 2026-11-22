@@ -10,26 +10,26 @@ struct DownloadQueueView: View {
             if manager.waitingForWifi {
                 Label("Aguardando Wi‑Fi (ajuste “Só no Wi‑Fi”).", systemImage: "wifi")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.inkSecondary)
             }
             if manager.queue.isEmpty {
                 ContentUnavailableView("Nenhum download", systemImage: "arrow.down.circle", description: Text("Baixe capítulos pelo detalhe da obra."))
             }
             ForEach(manager.queue) { task in
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(task.mangaTitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    Text(task.mangaTitle).font(.caption).foregroundStyle(Theme.inkSecondary).lineLimit(1)
                     Text(task.name).font(.subheadline).lineLimit(1)
                     switch task.state {
                     case .queued:
-                        Text(manager.isPaused ? "Pausado" : "Na fila").font(.caption2).foregroundStyle(.tertiary)
+                        Text(manager.isPaused ? "Pausado" : "Na fila").font(.caption2).foregroundStyle(Theme.inkTertiary)
                     case .downloading:
                         ProgressView(value: task.fraction) {
                             Text(task.totalPages > 0 ? "\(task.downloadedPages) de \(task.totalPages) páginas" : "Buscando páginas…")
                                 .font(.caption2)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Theme.inkSecondary)
                         }
                     case .failed:
-                        Text(task.error ?? "Falhou").font(.caption2).foregroundStyle(.red).lineLimit(2)
+                        Text(task.error ?? "Falhou").font(.caption2).foregroundStyle(Theme.critical).lineLimit(2)
                     }
                 }
                 .swipeActions {
@@ -38,6 +38,7 @@ struct DownloadQueueView: View {
             }
             .onMove { manager.move(fromOffsets: $0, toOffset: $1) }
         }
+        .themedList()
         .navigationTitle("Fila de downloads")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -127,17 +128,20 @@ struct DownloadSettingsView: View {
                 NavigationLink("Armazenamento") { StorageView() }
             }
         }
+        .themedList()
         .navigationTitle("Downloads")
         .navigationBarTitleDisplayMode(.inline)
     }
 }
 
-/// Espaço ocupado por obra, com opção de apagar; e o cache de imagens.
+/// Espaço ocupado por obra, com opção de apagar; e os caches de capítulos e de capas.
 struct StorageView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var rows: [Row] = []
     @State private var total: Int64 = 0
     @State private var cacheSize: Int64 = 0
+    @State private var chapterCacheSize: Int64 = 0
+    @State private var chapterCacheCount = 0
     @State private var confirmDeleteAll = false
 
     struct Row: Identifiable {
@@ -151,11 +155,14 @@ struct StorageView: View {
         List {
             Section {
                 LabeledContent("Downloads", value: format(total))
-                LabeledContent("Cache de imagens", value: format(cacheSize))
+                LabeledContent("Cache de capítulos", value: "\(chapterCacheCount) capítulos · \(format(chapterCacheSize))")
+                LabeledContent("Cache de capas", value: format(cacheSize))
                 Button("Limpar cache de imagens") {
                     ImageCache.shared.clearCache()
                     refresh()
                 }
+            } footer: {
+                Text("O cache remove páginas temporárias conforme o progresso da leitura. Downloads permanecem no aparelho.")
             }
             if !rows.isEmpty {
                 Section("Por obra") {
@@ -164,7 +171,7 @@ struct StorageView: View {
                             Text(format(row.size))
                         } label: {
                             Text(row.title).lineLimit(1)
-                            Text("\(row.chapters) capítulos").font(.caption).foregroundStyle(.secondary)
+                            Text("\(row.chapters) capítulos").font(.caption).foregroundStyle(Theme.inkSecondary)
                         }
                         .swipeActions {
                             Button("Apagar", role: .destructive) {
@@ -181,6 +188,7 @@ struct StorageView: View {
                 }
             }
         }
+        .themedList()
         .navigationTitle("Armazenamento")
         .navigationBarTitleDisplayMode(.inline)
         .task { refresh() }
@@ -211,6 +219,8 @@ struct StorageView: View {
         }
         .sorted { $0.size > $1.size }
         total = store.totalSize
-        cacheSize = store.size(of: ImageDiskStore.shared.directory)
+        cacheSize = ImageDiskStore.shared.coverSize
+        chapterCacheSize = ChapterPageCache.shared.size
+        chapterCacheCount = ChapterPageCache.shared.chapterCount
     }
 }

@@ -5,17 +5,26 @@ import CoreGraphics
 
 /// Bytes das imagens baixadas, em disco. Compartilhado entre a grade (ImageCache) e a
 /// impressão digital das capas, para cada capa ser baixada uma vez só.
+/// Capas e imagens soltas ficam em `Caches/MangaImageCache` (até `coverLimit`); páginas de
+/// capítulos registrados no `ChapterPageCache` vão para a pasta do capítulo.
 public final class ImageDiskStore: @unchecked Sendable {
     public static let shared = ImageDiskStore()
 
     public let directory: URL
+    /// Teto do cache de capas: `trim()` apaga as usadas há mais tempo até ficar abaixo dele.
+    public let coverLimit: Int64
+    public let chapters: ChapterPageCache
+    private let fm = FileManager.default
     private let inFlightLock = NSLock()
     private var inFlight: [String: Task<Data?, Never>] = [:]
 
-    private init() {
-        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-        directory = caches.appendingPathComponent("MangaImageCache", isDirectory: true)
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    public init(directory: URL? = nil, coverLimit: Int64 = 150 * 1024 * 1024, chapters: ChapterPageCache = .shared) {
+        let base = directory ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("MangaImageCache", isDirectory: true)
+        self.directory = base
+        self.coverLimit = coverLimit
+        self.chapters = chapters
+        try? fm.createDirectory(at: base, withIntermediateDirectories: true)
     }
 
     /// Chave estável entre execuções (`hashValue` muda a cada abertura do app).
@@ -25,10 +34,16 @@ public final class ImageDiskStore: @unchecked Sendable {
     }
 
     public func data(for urlString: String) -> Data? {
-        try? Data(contentsOf: path(for: urlString))
+        if chapters.isRegistered(urlString) { return chapters.data(for: urlString) }
+        let file = path(for: urlString)
+        guard let data = try? Data(contentsOf: file) else { return nil }
+        // A data de modificação marca o último uso, para o `trim()` apagar as mais antigas.
+        try? fm.setAttributes([.modificationDate: Date()], ofItemAtPath: file.path)
+        return data
     }
 
     public func store(_ data: Data, for urlString: String) {
+        if chapters.store(data, for: urlString) { return }
         try? data.write(to: path(for: urlString), options: .atomic)
     }
 
@@ -41,22 +56,65 @@ public final class ImageDiskStore: @unchecked Sendable {
             let prefix = "\(urlString)\n"
             inFlight = inFlight.filter { $0.key != urlString && !$0.key.hasPrefix(prefix) }
         }
-        try? FileManager.default.removeItem(at: path(for: urlString))
+        try? fm.removeItem(at: path(for: urlString))
     }
 
+    /// Apaga capas e páginas lidas (os downloads ficam).
     public func clear() {
         inFlightLock.withLock { inFlight.removeAll() }
-        try? FileManager.default.removeItem(at: directory)
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try? fm.removeItem(at: directory)
+        try? fm.createDirectory(at: directory, withIntermediateDirectories: true)
+        chapters.clear()
+    }
+
+    /// Espaço ocupado pelas capas, em bytes.
+    public var coverSize: Int64 {
+        coverFiles().reduce(0) { $0 + $1.size }
+    }
+
+    /// Apaga as capas usadas há mais tempo até o cache ficar abaixo de `coverLimit`.
+    public func trim() {
+        let files = coverFiles().sorted { $0.date < $1.date }
+        var total = files.reduce(0) { $0 + $1.size }
+        for file in files where total > coverLimit {
+            try? fm.removeItem(at: file.url)
+            total -= file.size
+        }
+    }
+
+    private func coverFiles() -> [(url: URL, date: Date, size: Int64)] {
+        let keys: [URLResourceKey] = [.contentModificationDateKey, .fileSizeKey, .isRegularFileKey]
+        let urls = (try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: keys)) ?? []
+        return urls.compactMap { url in
+            guard let values = try? url.resourceValues(forKeys: Set(keys)), values.isRegularFile == true else { return nil }
+            return (url, values.contentModificationDate ?? .distantPast, Int64(values.fileSize ?? 0))
+        }
+    }
+
+    /// Até esta versão, `MangaImageCache` misturava capas e todas as páginas lidas, sem limite.
+    /// Na primeira abertura depois da atualização ele recomeça vazio (uma vez só).
+    public func migrateLegacyCache(defaults: UserDefaults = .standard) {
+        let flag = "imageCache.chapterPagesSplit"
+        guard !defaults.bool(forKey: flag) else { return }
+        defaults.set(true, forKey: flag)
+        // Renomear é instantâneo; apagar milhares de páginas fica para segundo plano.
+        let old = directory.deletingLastPathComponent()
+            .appendingPathComponent("\(directory.lastPathComponent)-old-\(UUID().uuidString)", isDirectory: true)
+        if (try? fm.moveItem(at: directory, to: old)) != nil {
+            DispatchQueue.global(qos: .background).async { try? FileManager.default.removeItem(at: old) }
+        } else {
+            try? fm.removeItem(at: directory)
+        }
+        try? fm.createDirectory(at: directory, withIntermediateDirectories: true)
     }
 
     /// Baixa (ou lê do disco) os bytes de uma imagem. Coalesce requisições concorrentes da mesma URL.
     public func fetch(urlString: String, referer: String?) async -> Data? {
+        let registration = chapters.registration(for: urlString)
         if let cached = data(for: urlString) { return cached }
         guard let url = URL(string: urlString) else { return nil }
         // Páginas baixadas e da Fonte Local já estão no aparelho.
         if url.isFileURL { return try? Data(contentsOf: url) }
-
         let key = inFlightKey(urlString: urlString, referer: referer)
         let task: Task<Data?, Never> = inFlightLock.withLock {
             if let existing = inFlight[key] {
@@ -81,7 +139,11 @@ public final class ImageDiskStore: @unchecked Sendable {
                 guard let (data, response) = try? await URLSession.shared.data(for: req) else { return nil }
                 if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) { return nil }
                 guard !data.isEmpty else { return nil }
-                self.store(data, for: urlString)
+                if let registration {
+                    _ = self.chapters.store(data, for: urlString, expected: registration)
+                } else {
+                    self.store(data, for: urlString)
+                }
                 return data
             }
             inFlight[key] = newTask

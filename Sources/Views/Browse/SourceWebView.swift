@@ -32,7 +32,7 @@ struct SourceWebView: View {
                          ? "Verificação concluída. Toque em Concluído para voltar."
                          : "Se aparecer uma verificação, conclua-a e toque em Concluído.")
                         .font(.caption)
-                        .foregroundStyle(cleared ? .green : .secondary)
+                        .foregroundStyle(cleared ? Theme.positive : Theme.inkSecondary)
                         .frame(maxWidth: .infinity)
                         .padding(8)
                         .background(.bar)

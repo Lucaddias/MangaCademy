@@ -10,7 +10,14 @@ public final class GuyaSource: ThemeSource, MangaSource {
 
     public func fetchLatest(page: Int) async throws -> SourceMangaPage {
         guard page == 1 else { return .empty }
-        let items = try await allSeries().sorted { ($0.latestChapterDate ?? .distantPast) > ($1.latestChapterDate ?? .distantPast) }
+        let items = try await allSeries(includeSortDate: true)
+            .sorted { ($0.latestChapterDate ?? .distantPast) > ($1.latestChapterDate ?? .distantPast) }
+            .map { item in
+                var item = item
+                // last_updated ordena a fonte, mas não comprova a data de um capítulo.
+                item.latestChapterDate = nil
+                return item
+            }
         return SourceMangaPage(items: items, hasNextPage: false)
     }
 
@@ -20,12 +27,14 @@ public final class GuyaSource: ThemeSource, MangaSource {
         return SourceMangaPage(items: try await allSeries().filter { $0.title.lowercased().contains(q) }, hasNextPage: false)
     }
 
-    private func allSeries() async throws -> [SourceMangaItem] {
+    private func allSeries(includeSortDate: Bool = false) async throws -> [SourceMangaItem] {
         guard let root = try await http.json("\(baseUrl)/api/get_all_series/") as? [String: Any] else { return [] }
         return root.compactMap { title, value -> SourceMangaItem? in
             guard let series = value as? [String: Any], let slug = series.string("slug") else { return nil }
             var result = item(remoteUrl: slug, title: title, cover: coverURL(series.string("cover")))
-            result.latestChapterDate = (series["last_updated"] as? NSNumber).map { Date(timeIntervalSince1970: $0.doubleValue) }
+            if includeSortDate {
+                result.latestChapterDate = (series["last_updated"] as? NSNumber).map { Date(timeIntervalSince1970: $0.doubleValue) }
+            }
             return result
         }
         .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }

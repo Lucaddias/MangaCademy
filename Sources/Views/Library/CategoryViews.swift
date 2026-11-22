@@ -26,7 +26,7 @@ struct CategoryManagerView: View {
                     editing = category
                 } label: {
                     Label(category.name, systemImage: "folder")
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(Theme.ink)
                 }
                 .swipeActions {
                     Button("Apagar", role: .destructive) { deleting = category }
@@ -34,6 +34,7 @@ struct CategoryManagerView: View {
             }
             .onMove(perform: move)
         }
+        .themedList()
         .navigationTitle("Categorias")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -125,17 +126,17 @@ struct CategoryPickerSheet: View {
             List {
                 if categories.isEmpty {
                     Text("Nenhuma categoria criada ainda.")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.inkSecondary)
                 }
                 ForEach(categories) { category in
                     Button {
                         if selected.contains(category.id) { selected.remove(category.id) } else { selected.insert(category.id) }
                     } label: {
                         HStack {
-                            Text(category.name).foregroundStyle(.primary)
+                            Text(category.name).foregroundStyle(Theme.ink)
                             Spacer()
                             Image(systemName: selected.contains(category.id) ? "checkmark.circle.fill" : "circle")
-                                .foregroundStyle(selected.contains(category.id) ? Color.accentColor : .secondary)
+                                .foregroundStyle(selected.contains(category.id) ? Theme.accent : Theme.inkSecondary)
                         }
                     }
                 }
@@ -145,6 +146,7 @@ struct CategoryPickerSheet: View {
                     Label("Nova categoria", systemImage: "plus")
                 }
             }
+            .themedList()
             .navigationTitle(mangas.count == 1 ? "Categorias" : "Categorias de \(mangas.count) obras")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -231,11 +233,11 @@ struct LibrarySettingsSheet: View {
                                 }
                             } label: {
                                 HStack {
-                                    Text(option.title).foregroundStyle(.primary)
+                                    Text(option.title).foregroundStyle(Theme.ink)
                                     Spacer()
                                     if settings.sort == option {
                                         Image(systemName: option == .random ? "shuffle" : (settings.ascending ? "arrow.up" : "arrow.down"))
-                                            .foregroundStyle(Color.accentColor)
+                                            .foregroundStyle(Theme.accent)
                                     }
                                 }
                             }
@@ -266,6 +268,7 @@ struct LibrarySettingsSheet: View {
                     }
                 }
             }
+            .themedList()
             .navigationTitle("Biblioteca")
             .navigationBarTitleDisplayMode(.inline)
         }
@@ -278,8 +281,8 @@ struct LibrarySettingsSheet: View {
         } label: {
             HStack {
                 Image(systemName: value.wrappedValue.symbol)
-                    .foregroundStyle(value.wrappedValue == .exclude ? Color.red : Color.accentColor)
-                Text(title).foregroundStyle(.primary)
+                    .foregroundStyle(value.wrappedValue == .exclude ? Theme.critical : Theme.accent)
+                Text(title).foregroundStyle(Theme.ink)
             }
         }
     }

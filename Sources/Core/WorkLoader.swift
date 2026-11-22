@@ -184,10 +184,25 @@ public final class WorkLoader {
     private func lookupMultiLanguage(sourceId: String) async {
         guard !state.work.refs.contains(where: { $0.sourceId == sourceId }),
               let source = SourceManager.shared.getSource(id: sourceId) else { return }
+        pendingSources += 1
+        onUpdate?(self)
+        defer {
+            pendingSources -= 1
+            onUpdate?(self)
+        }
         let candidates = [state.work.title] + state.work.refs.map(\.title)
         var seenQueries = Set<String>()
+        var searchFailure: Error?
         for query in candidates where seenQueries.insert(TitleKey.normalize(query)).inserted {
-            guard query.count >= 3, let page = try? await source.search(query: query, page: 1) else { continue }
+            guard query.count >= 3 else { continue }
+            let page: SourceMangaPage
+            do {
+                page = try await source.search(query: query, page: 1)
+            } catch {
+                searchFailure = error
+                if seenQueries.count >= 2 { break }
+                continue
+            }
             if let match = page.items.first(where: { !TitleKey.keys(for: [$0.title] + $0.altTitles).isDisjoint(with: state.work.titleKeys) }) {
                 let ref = WorkSourceRef(
                     sourceId: match.sourceId,
@@ -201,7 +216,10 @@ public final class WorkLoader {
                 await loadRef(ref)
                 return
             }
-            if seenQueries.count >= 2 { return }
+            if seenQueries.count >= 2 { break }
+        }
+        if let searchFailure {
+            state.addFailure("Busca em \(source.name): \(searchFailure.localizedDescription)")
         }
     }
 }
