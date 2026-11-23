@@ -39,6 +39,7 @@ struct DownloadQueueView: View {
             .onMove { manager.move(fromOffsets: $0, toOffset: $1) }
         }
         .themedList()
+        .accessibilityIdentifier("downloads.queue")
         .navigationTitle("Fila de downloads")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

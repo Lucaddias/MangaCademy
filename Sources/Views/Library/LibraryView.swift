@@ -255,6 +255,7 @@ public struct LibraryView: View {
             if settings.showLanguageBadge { item } else { item.withoutLanguages() }
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("library.item.\(manga.id)")
         .simultaneousGesture(LongPressGesture().onEnded { _ in
             if !isSelecting {
                 isSelecting = true
@@ -320,6 +321,7 @@ public struct LibraryView: View {
                     } label: {
                         Label("Atualizar biblioteca", systemImage: "arrow.clockwise")
                     }
+                    .accessibilityIdentifier("library.update")
                     NavigationLink {
                         CategoryManagerView()
                     } label: {
@@ -333,6 +335,7 @@ public struct LibraryView: View {
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
+                .accessibilityIdentifier("library.actions-menu")
             }
         }
     }
@@ -424,7 +427,8 @@ extension MangaGridItem {
             badgeText: badgeText,
             languageText: nil,
             sourceCount: sourceCount,
-            unreadCount: unreadCount
+            unreadCount: unreadCount,
+            accessibilityWorkID: accessibilityWorkID
         )
         .library(mode: displayMode, downloadCount: downloadCount, isSelected: isSelected, onContinue: onContinue)
     }

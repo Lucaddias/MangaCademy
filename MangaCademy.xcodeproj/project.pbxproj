@@ -14,11 +14,19 @@
 			remoteGlobalIDString = D1A723C541F04EA6A49189BA;
 			remoteInfo = MihonReader;
 		};
+		05E1333395184FD4BEAD4AEA /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A3F1417B90474E47B1BE3191 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D1A723C541F04EA6A49189BA;
+			remoteInfo = MihonReader;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		2114C4C9C1BA4502BCFB95A1 /* MihonReader.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MihonReader.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AD4263457CED42B0B098471D /* MangaCademyTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MangaCademyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		346F5004D845433FBBB3A4EB /* MihonReaderUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MihonReaderUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -50,6 +58,11 @@
 			path = Resources;
 			sourceTree = "<group>";
 		};
+		2F444A5591E440A3A9CA6CD5 /* UITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = UITests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -67,6 +80,12 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		6DB73372D4FC437FAEDB5D08 /* UI Tests Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = ();
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -75,6 +94,7 @@
 			children = (
 				2114C4C9C1BA4502BCFB95A1 /* MihonReader.app */,
 				AD4263457CED42B0B098471D /* MangaCademyTests.xctest */,
+				346F5004D845433FBBB3A4EB /* MihonReaderUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -85,6 +105,7 @@
 				408177E2BB6A4F0D8A31601F /* Sources */,
 				98440745CE9546ADB7EDC4D9 /* Resources */,
 				24BA8B3A18F64272BB3C7C5E /* Tests */,
+				2F444A5591E440A3A9CA6CD5 /* UITests */,
 				46B00166F278471A802888B0 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -134,6 +155,26 @@
 			productReference = 2114C4C9C1BA4502BCFB95A1 /* MihonReader.app */;
 			productType = "com.apple.product-type.application";
 		};
+		25F0422332894378ADA52FB7 /* MihonReaderUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4499F51E2F9C4C9287F177F3 /* Build configuration list for PBXNativeTarget "MihonReaderUITests" */;
+			buildPhases = (
+				41744562876D46F98AA04BF7 /* UI Tests Sources */,
+				6DB73372D4FC437FAEDB5D08 /* UI Tests Frameworks */,
+				D05F642B6205424482C47F66 /* UI Tests Resources */,
+			);
+			buildRules = ();
+			dependencies = (
+				2274D1F6061A425E853CDE9C /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				2F444A5591E440A3A9CA6CD5 /* UITests */,
+			);
+			name = MihonReaderUITests;
+			productName = MihonReaderUITests;
+			productReference = 346F5004D845433FBBB3A4EB /* MihonReaderUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -150,6 +191,10 @@
 					};
 					D1A723C541F04EA6A49189BA = {
 						CreatedOnToolsVersion = 15.0;
+					};
+					25F0422332894378ADA52FB7 = {
+						CreatedOnToolsVersion = 27.2;
+						TestTargetID = D1A723C541F04EA6A49189BA;
 					};
 				};
 			};
@@ -169,6 +214,7 @@
 			targets = (
 				D1A723C541F04EA6A49189BA /* MihonReader */,
 				C198348B9CE342119FB049FF /* MangaCademyTests */,
+				25F0422332894378ADA52FB7 /* MihonReaderUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -188,6 +234,12 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D05F642B6205424482C47F66 /* UI Tests Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = ();
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -205,6 +257,12 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		41744562876D46F98AA04BF7 /* UI Tests Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = ();
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -212,6 +270,11 @@
 			isa = PBXTargetDependency;
 			target = D1A723C541F04EA6A49189BA /* MihonReader */;
 			targetProxy = 64F3E42B08E64CD3B0B22F40 /* PBXContainerItemProxy */;
+		};
+		2274D1F6061A425E853CDE9C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D1A723C541F04EA6A49189BA /* MihonReader */;
+			targetProxy = 05E1333395184FD4BEAD4AEA /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -235,7 +298,8 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.lucadias.MihonReader;
+				MIHONREADER_BUNDLE_IDENTIFIER = com.lucadias.MihonReader;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(MIHONREADER_BUNDLE_IDENTIFIER)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -300,7 +364,8 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.lucadias.MihonReader;
+				MIHONREADER_BUNDLE_IDENTIFIER = com.lucadias.MihonReader;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(MIHONREADER_BUNDLE_IDENTIFIER)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -351,6 +416,42 @@
 			};
 			name = Release;
 		};
+		F02FA02C98F649D5B88B2138 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 8CTC75M93B;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.lucadias.MihonReaderUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = MihonReader;
+			};
+			name = Debug;
+		};
+		4F5A56FFC8F241868AB48EF7 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 8CTC75M93B;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.lucadias.MihonReaderUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = MihonReader;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -377,6 +478,15 @@
 			buildConfigurations = (
 				0B14B5D19EC3411CB8D3A4DA /* Debug */,
 				9A2313ADCC8C4AD785CB2C56 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		4499F51E2F9C4C9287F177F3 /* Build configuration list for PBXNativeTarget "MihonReaderUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F02FA02C98F649D5B88B2138 /* Debug */,
+				4F5A56FFC8F241868AB48EF7 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

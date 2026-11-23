@@ -13,7 +13,17 @@ struct MihonReaderApp: App {
         store = ModelStore.openRecovering()
         AppStore.container = store.container
         ImageDiskStore.shared.migrateLegacyCache()
+        MeasurementLiveScenarioSupport.prepareIfRequested()
         Self.trimImageCache()
+        MeasurementFixtureSupport.seedIfRequested(container: store.container)
+
+        if MeasurementLiveScenarioSupport.isEnabled {
+            let remoteURL = MeasurementLiveScenarioSupport.requestedMangaRemoteURL
+            let measurementContainer = store.container
+            Task { @MainActor in
+                await MeasurementLiveScenarioSupport.seedIfNeeded(container: measurementContainer, remoteURL: remoteURL)
+            }
+        }
     }
 
     var body: some Scene {
@@ -39,9 +49,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
         Theme.applyAppearance()
-        BackgroundTasks.register()
-        BackgroundTasks.scheduleLibraryUpdate()
-        BackgroundTasks.scheduleBackup()
+        if !MeasurementLiveScenarioSupport.isEnabled {
+            BackgroundTasks.register()
+            BackgroundTasks.scheduleLibraryUpdate()
+            BackgroundTasks.scheduleBackup()
+        }
         return true
     }
 

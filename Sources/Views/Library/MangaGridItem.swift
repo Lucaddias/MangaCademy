@@ -9,6 +9,7 @@ public struct MangaGridItem: View {
     let languageText: String?
     let sourceCount: Int
     let unreadCount: Int?
+    let accessibilityWorkID: String?
     var displayMode: LibraryDisplayMode = .comfortableGrid
     var downloadCount: Int?
     var isSelected = false
@@ -25,7 +26,8 @@ public struct MangaGridItem: View {
         badgeText: String? = nil,
         languageText: String? = nil,
         sourceCount: Int = 1,
-        unreadCount: Int? = nil
+        unreadCount: Int? = nil,
+        accessibilityWorkID: String? = nil
     ) {
         self.title = title
         self.coverUrl = coverUrl
@@ -35,6 +37,7 @@ public struct MangaGridItem: View {
         self.languageText = languageText
         self.sourceCount = sourceCount
         self.unreadCount = unreadCount
+        self.accessibilityWorkID = accessibilityWorkID
     }
 
     /// Atalho para obras unificadas do catálogo.
@@ -49,7 +52,8 @@ public struct MangaGridItem: View {
             },
             languageText: work.languageBadges(preferred: filter),
             sourceCount: Set(work.refs.map(\.sourceId)).count,
-            unreadCount: unreadCount
+            unreadCount: unreadCount,
+            accessibilityWorkID: work.id
         )
     }
 
@@ -165,6 +169,7 @@ public struct MangaGridItem: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Continuar lendo")
+        .accessibilityIdentifier(accessibilityWorkID.map { "library.continue.\($0)" } ?? "library.continue")
     }
 
     private var gridCell: some View {

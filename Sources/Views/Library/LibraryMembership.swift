@@ -135,6 +135,7 @@ struct CatalogCell: View {
                 .caption(showsLatestChapter ? work.latestChapterCaption() : nil)
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("catalog.item.\(work.id)")
         .contextMenu {
             if let manga {
                 Button("Remover da biblioteca", systemImage: "heart.slash", role: .destructive) {

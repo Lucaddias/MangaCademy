@@ -20,6 +20,21 @@
                ReferencedContainer = "container:MangaCademy.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
+
+      <BuildActionEntry
+         buildForTesting = "YES"
+         buildForRunning = "NO"
+         buildForProfiling = "NO"
+         buildForArchiving = "NO"
+         buildForAnalyzing = "NO">
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "25F0422332894378ADA52FB7"
+            BuildableName = "MihonReaderUITests.xctest"
+            BlueprintName = "MihonReaderUITests"
+            ReferencedContainer = "container:MangaCademy.xcodeproj">
+         </BuildableReference>
+      </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
@@ -37,6 +52,18 @@
                BlueprintIdentifier = "C198348B9CE342119FB049FF"
                BuildableName = "MangaCademyTests.xctest"
                BlueprintName = "MangaCademyTests"
+               ReferencedContainer = "container:MangaCademy.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "25F0422332894378ADA52FB7"
+               BuildableName = "MihonReaderUITests.xctest"
+               BlueprintName = "MihonReaderUITests"
                ReferencedContainer = "container:MangaCademy.xcodeproj">
             </BuildableReference>
          </TestableReference>
