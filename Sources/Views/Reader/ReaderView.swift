@@ -317,6 +317,8 @@ public struct ReaderView: View {
             }
             .onAppear { isLandscape = proxy.size.width > proxy.size.height }
             .onChange(of: proxy.size) { _, size in isLandscape = size.width > size.height }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("reader.root")
         }
         .statusBar(hidden: !showControls)
         .navigationBarHidden(true)
@@ -435,6 +437,8 @@ public struct ReaderView: View {
             .padding(.horizontal, size.width * settings.webtoonSidePadding / 100)
             .background(ScrollViewProbe(scroller: webtoonScroller))
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("reader.webtoon")
         .scrollPosition(id: $position)
         .scaleEffect(zoom)
         .offset(x: panX)
@@ -471,6 +475,7 @@ public struct ReaderView: View {
         switch item {
         case .page(_, let page, _):
             WebtoonPageView(page: page, cropBorders: settings.cropBorders, actions: pageActions)
+                .accessibilityIdentifier("reader.page.\(page.pageNumber)")
         case .transition(let from, let to):
             transitionView(from: from, to: to)
                 .frame(height: 320)
@@ -495,17 +500,22 @@ public struct ReaderView: View {
                     LazyVStack(spacing: 0) { stack }
                         .scrollTargetLayout()
                 }
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("reader.paged")
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(spacing: 0) { stack }
                         .scrollTargetLayout()
                 }
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("reader.paged")
             }
         }
         .scrollTargetBehavior(.paging)
         .scrollPosition(id: $position)
         .environment(\.layoutDirection, mode.isRightToLeft ? .rightToLeft : .leftToRight)
         .ignoresSafeArea()
+        .accessibilityIdentifier("reader.paged")
     }
 
     @ViewBuilder
@@ -526,6 +536,7 @@ public struct ReaderView: View {
                     onTap: handleTap,
                     actions: pageActions
                 )
+                .accessibilityIdentifier("reader.page.\(page.pageNumber)")
             case .transition(let from, let to):
                 tappable(transitionView(from: from, to: to))
                     .onAppear { reachedEnd(of: from) }
@@ -596,6 +607,8 @@ public struct ReaderView: View {
                         .background(.ultraThinMaterial.opacity(0.8))
                         .clipShape(Circle())
                 }
+                .accessibilityLabel("Fechar leitor")
+                .accessibilityIdentifier("reader.close")
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(mangaTitle)

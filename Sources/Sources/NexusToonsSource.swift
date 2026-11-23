@@ -42,7 +42,9 @@ public final class NexusToonsSource: MangaSource {
                 genres: Self.genres(item),
                 hasFullMetadata: true,
                 latestChapterName: Self.latestChapterName(item),
-                latestChapterDate: item.string("lastChapterAt").flatMap(DateParsing.iso)
+                latestChapterDate: item.string("lastChapterAt").flatMap(DateParsing.iso),
+                chapterCount: item.int("chapterCount"),
+                isSuggestive: item["isSuggestive"] as? Bool == true
             )
         }
         let page = json.int("page") ?? 1

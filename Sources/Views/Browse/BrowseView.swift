@@ -157,6 +157,7 @@ public struct BrowseView: View {
         }
         .accessibilityLabel("Fonte: \(selectedSource?.name ?? "todas")")
         .accessibilityHint("Troca a fonte do catálogo")
+        .accessibilityIdentifier("browse.source-menu")
     }
 
     private var searchField: some View {
@@ -165,6 +166,7 @@ public struct BrowseView: View {
                 .foregroundStyle(Theme.inkTertiary)
             TextField("", text: $searchText, prompt: Text(searchPrompt).foregroundStyle(Theme.inkTertiary))
                 .foregroundStyle(Theme.ink)
+                .accessibilityIdentifier("browse.search")
                 .focused($searchFocused)
                 .submitLabel(.search)
                 .autocorrectionDisabled()
@@ -269,6 +271,7 @@ public struct BrowseView: View {
                 footer
                     .padding(.vertical, Theme.Space.xl)
             }
+            .accessibilityIdentifier("browse.results")
             .scrollDismissesKeyboard(.immediately)
             .refreshable { reload() }
         }

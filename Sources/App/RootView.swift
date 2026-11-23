@@ -30,12 +30,14 @@ public struct RootView: View {
             LibraryView()
                 .tabItem {
                     Label("Biblioteca", systemImage: "books.vertical")
+                        .accessibilityIdentifier("tab.library")
                 }
                 .tag(AppNavigation.Tab.library)
 
             UpdatesView()
                 .tabItem {
                     Label("Novidades", systemImage: "bell")
+                        .accessibilityIdentifier("tab.updates")
                 }
                 .badge(updatesBadge)
                 .tag(AppNavigation.Tab.updates)
@@ -43,18 +45,21 @@ public struct RootView: View {
             HistoryView()
                 .tabItem {
                     Label("Histórico", systemImage: "clock")
+                        .accessibilityIdentifier("tab.history")
                 }
                 .tag(AppNavigation.Tab.history)
 
             BrowseView()
                 .tabItem {
                     Label("Explorar", systemImage: "safari")
+                        .accessibilityIdentifier("tab.browse")
                 }
                 .tag(AppNavigation.Tab.browse)
 
             SettingsView()
                 .tabItem {
                     Label("Ajustes", systemImage: "gearshape")
+                        .accessibilityIdentifier("tab.settings")
                 }
                 .tag(AppNavigation.Tab.settings)
         }
@@ -72,7 +77,9 @@ public struct RootView: View {
         .task(id: favorites.count) { AppLinks.indexLibrary(favorites) }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
-                BackgroundTasks.catchUpIfNeeded(context: modelContext)
+                if !MeasurementLiveScenarioSupport.isEnabled {
+                    BackgroundTasks.catchUpIfNeeded(context: modelContext)
+                }
                 DownloadManager.shared.pump()
             }
         }

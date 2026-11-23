@@ -97,15 +97,25 @@ final class WorkDetailModel {
 
     func load(filter: LanguageFilter, savedLanguage: String?) async {
         guard !hasLoaded else { return }
-        hasLoaded = true
         self.filter = filter
         if let savedLanguage {
             self.savedLanguage = savedLanguage
             if !userPickedLanguage { selectedLanguage = savedLanguage }
         }
+        if MeasurementLiveScenarioSupport.isEnabled, !localChapters.isEmpty {
+            hasLoaded = true
+            regroup()
+            return
+        }
+
+        hasLoaded = true
         regroup()
 
-        let loader = WorkLoader(work: work, filter: filter)
+        let loader = WorkLoader(
+            work: work,
+            filter: filter,
+            lookupOtherLanguages: !MeasurementLiveScenarioSupport.isEnabled
+        )
         loader.onUpdate = { [weak self] loader in self?.apply(loader) }
         await loader.load()
     }
@@ -324,6 +334,7 @@ public struct MangaDetailView: View {
             }
         }
         .listStyle(.plain)
+        .accessibilityIdentifier("detail.list")
         .themedList()
         .navigationTitle(model.displayTitle)
         .navigationBarTitleDisplayMode(.inline)
@@ -527,6 +538,7 @@ public struct MangaDetailView: View {
                     Image(systemName: "arrow.down.circle")
                 }
                 .accessibilityLabel("Baixar capítulos")
+                .accessibilityIdentifier("detail.download-menu")
                 .disabled(model.chapters.isEmpty)
             }
             ToolbarItem(placement: .topBarTrailing) {
@@ -831,6 +843,7 @@ public struct MangaDetailView: View {
                     Image(systemName: flags.hasActiveFilter ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
                 }
                 .accessibilityLabel("Filtrar e ordenar capítulos")
+                .accessibilityIdentifier("detail.chapter-options")
             }
             .font(.body)
             .foregroundStyle(Theme.ink)
@@ -951,6 +964,7 @@ public struct MangaDetailView: View {
             }
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("detail.chapter.\(ch.remoteUrl)")
         .listRowBackground(Color.clear)
         .listRowSeparatorTint(Theme.hairline)
         .listRowInsets(EdgeInsets(top: 0, leading: Theme.Space.margin, bottom: 0, trailing: Theme.Space.margin))

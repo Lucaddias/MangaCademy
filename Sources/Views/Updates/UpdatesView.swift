@@ -153,6 +153,7 @@ struct UpdatesView: View {
             }
             .listStyle(.plain)
             .themedList()
+            .accessibilityIdentifier("updates.list")
             .navigationTitle("Novidades")
             .refreshable { await updater.update(categoryId: nil, context: modelContext) }
             .toolbar {

@@ -240,7 +240,9 @@ struct SpreadPageView: View {
         var body: some View {
             Group {
                 if let image = loader.image {
-                    Image(uiImage: image.image).resizable().scaledToFit()
+                    Image(uiImage: image.image)
+                        .resizable()
+                        .scaledToFit()
                 } else {
                     ProgressView()
                 }

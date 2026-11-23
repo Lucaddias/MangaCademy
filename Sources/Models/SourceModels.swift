@@ -18,6 +18,9 @@ public struct SourceMangaItem: Identifiable, Hashable {
     /// Capítulo mais novo, quando a listagem informa (usado em "Recentes").
     public var latestChapterName: String?
     public var latestChapterDate: Date?
+    /// Total informado pela fonte, quando disponível; usado para escolher uma obra de carga real.
+    public let chapterCount: Int?
+    public let isSuggestive: Bool
 
     public init(
         sourceId: String,
@@ -30,7 +33,9 @@ public struct SourceMangaItem: Identifiable, Hashable {
         genres: [String] = [],
         hasFullMetadata: Bool = false,
         latestChapterName: String? = nil,
-        latestChapterDate: Date? = nil
+        latestChapterDate: Date? = nil,
+        chapterCount: Int? = nil,
+        isSuggestive: Bool = false
     ) {
         self.id = "\(sourceId):\(remoteUrl)"
         self.sourceId = sourceId
@@ -44,6 +49,8 @@ public struct SourceMangaItem: Identifiable, Hashable {
         self.hasFullMetadata = hasFullMetadata
         self.latestChapterName = latestChapterName
         self.latestChapterDate = latestChapterDate
+        self.chapterCount = chapterCount
+        self.isSuggestive = isSuggestive
     }
 }
 

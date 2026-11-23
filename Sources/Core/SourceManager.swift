@@ -18,6 +18,28 @@ public final class SourceManager {
 
     /// Recria as fontes a partir do catálogo Keiyoushi (empacotado ou atualizado ao vivo).
     public func rebuild() {
+        if MeasurementFixtureSupport.isEnabled {
+            let source = MeasurementFixtureSource()
+            lock.lock()
+            sources = [source]
+            byId = [source.id: source]
+            nsfwIds = []
+            safeIds = [source.id]
+            lock.unlock()
+            return
+        }
+
+        if MeasurementLiveScenarioSupport.isEnabled {
+            let source = NexusToonsSource()
+            lock.lock()
+            sources = [source]
+            byId = [source.id: source]
+            nsfwIds = []
+            safeIds = [source.id]
+            lock.unlock()
+            return
+        }
+
         var list: [MangaSource] = []
         var nsfw: Set<String> = []
         var safe: Set<String> = []
